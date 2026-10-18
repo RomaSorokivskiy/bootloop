@@ -1,0 +1,6 @@
+Genuine MP3 generated locally 2026-10-18 with installed ffmpeg mp3_mf encoder (Windows Media Foundation), command:
+ffmpeg -f lavfi -i sine=frequency=440:duration=1.05:sample_rate=44100 -ac 2 -c:a mp3_mf -b:a 128k system-encoder.mp3
+No downloaded audio. Source signal is a generated 440 Hz sine. Decoder retains Media Foundation source frame zero without additional analysis trim or playback trim.
+
+Source duration changed to 1.05 seconds because the system encoder emits a 1.018776 second MP3 after encoder drain; test bounds cover container decode length without assuming gapless encoder padding.
+Native UE5.8 Windows MF decode evidence (2026-10-18): 53341 stereo PCM16 frames,213364bytes at48kHz. Independent zero-crossing measurement=440.000Hz, so canonical sample rate/pitch are correct. MF decoded padding exceeds ffprobe's1.018776s container estimate; test now allows <=1.2s decoded data and verifies frame/byte accounting plus source440Hz pitch, without gapless trimming. Both analysis and playback retain the same decoded frame0.

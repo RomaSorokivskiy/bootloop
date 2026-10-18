@@ -1,0 +1,625 @@
+{
+  "schema_version": 1,
+  "tracks": [
+    {
+      "id": "bootloop.starter.safe_mode_sunrise",
+      "slug": "safe_mode_sunrise",
+      "display_name": "Safe Mode Sunrise",
+      "bpm": 96,
+      "key_mode": "A minor",
+      "bars": 64,
+      "sample_rate": 48000,
+      "channels": 2,
+      "frame_count": 7680000,
+      "duration_seconds": 160.0,
+      "first_beat_frame": 0,
+      "first_beat_seconds": 0,
+      "sections": [
+        {
+          "name": "intro",
+          "start_bar": 0,
+          "bars": 8,
+          "start_frame": 0,
+          "end_frame": 960000
+        },
+        {
+          "name": "A",
+          "start_bar": 8,
+          "bars": 16,
+          "start_frame": 960000,
+          "end_frame": 2880000
+        },
+        {
+          "name": "break",
+          "start_bar": 24,
+          "bars": 8,
+          "start_frame": 2880000,
+          "end_frame": 3840000
+        },
+        {
+          "name": "build",
+          "start_bar": 32,
+          "bars": 8,
+          "start_frame": 3840000,
+          "end_frame": 4800000
+        },
+        {
+          "name": "B",
+          "start_bar": 40,
+          "bars": 16,
+          "start_frame": 4800000,
+          "end_frame": 6720000
+        },
+        {
+          "name": "outro",
+          "start_bar": 56,
+          "bars": 8,
+          "start_frame": 6720000,
+          "end_frame": 7680000
+        }
+      ],
+      "sha256": "fb6ac7b87c6513a3614a2e208bed30f7422f36fa34be69855c021d0ed06cca80",
+      "source_seed": 199500,
+      "provenance": "Original BOOTLOOP procedural composition; generate_v04_audio.py + arrangements.json; no external samples",
+      "file": "safe_mode_sunrise.wav"
+    },
+    {
+      "id": "bootloop.starter.floppy_seek",
+      "slug": "floppy_seek",
+      "display_name": "Floppy Seek",
+      "bpm": 108,
+      "key_mode": "C Dorian",
+      "bars": 64,
+      "sample_rate": 48000,
+      "channels": 2,
+      "frame_count": 6826667,
+      "duration_seconds": 142.22222916666666,
+      "first_beat_frame": 0,
+      "first_beat_seconds": 0,
+      "sections": [
+        {
+          "name": "intro",
+          "start_bar": 0,
+          "bars": 8,
+          "start_frame": 0,
+          "end_frame": 853333
+        },
+        {
+          "name": "A",
+          "start_bar": 8,
+          "bars": 16,
+          "start_frame": 853333,
+          "end_frame": 2560000
+        },
+        {
+          "name": "break",
+          "start_bar": 24,
+          "bars": 8,
+          "start_frame": 2560000,
+          "end_frame": 3413333
+        },
+        {
+          "name": "build",
+          "start_bar": 32,
+          "bars": 8,
+          "start_frame": 3413333,
+          "end_frame": 4266667
+        },
+        {
+          "name": "B",
+          "start_bar": 40,
+          "bars": 16,
+          "start_frame": 4266667,
+          "end_frame": 5973333
+        },
+        {
+          "name": "outro",
+          "start_bar": 56,
+          "bars": 8,
+          "start_frame": 5973333,
+          "end_frame": 6826667
+        }
+      ],
+      "sha256": "133e964bca46ccf1a9f4d356c56069607ed021fca008720377138b2d699fdab1",
+      "source_seed": 199613,
+      "provenance": "Original BOOTLOOP procedural composition; generate_v04_audio.py + arrangements.json; no external samples",
+      "file": "floppy_seek.wav"
+    },
+    {
+      "id": "bootloop.starter.inbox_zero",
+      "slug": "inbox_zero",
+      "display_name": "Inbox Zero",
+      "bpm": 116,
+      "key_mode": "E minor",
+      "bars": 64,
+      "sample_rate": 48000,
+      "channels": 2,
+      "frame_count": 6355862,
+      "duration_seconds": 132.41379166666667,
+      "first_beat_frame": 0,
+      "first_beat_seconds": 0,
+      "sections": [
+        {
+          "name": "intro",
+          "start_bar": 0,
+          "bars": 8,
+          "start_frame": 0,
+          "end_frame": 794483
+        },
+        {
+          "name": "A",
+          "start_bar": 8,
+          "bars": 16,
+          "start_frame": 794483,
+          "end_frame": 2383448
+        },
+        {
+          "name": "break",
+          "start_bar": 24,
+          "bars": 8,
+          "start_frame": 2383448,
+          "end_frame": 3177931
+        },
+        {
+          "name": "build",
+          "start_bar": 32,
+          "bars": 8,
+          "start_frame": 3177931,
+          "end_frame": 3972414
+        },
+        {
+          "name": "B",
+          "start_bar": 40,
+          "bars": 16,
+          "start_frame": 3972414,
+          "end_frame": 5561379
+        },
+        {
+          "name": "outro",
+          "start_bar": 56,
+          "bars": 8,
+          "start_frame": 5561379,
+          "end_frame": 6355862
+        }
+      ],
+      "sha256": "068f92cadaf262c9cd11643e6540d3c65d77fec97c60c4c3909bcda0038b96a5",
+      "source_seed": 199726,
+      "provenance": "Original BOOTLOOP procedural composition; generate_v04_audio.py + arrangements.json; no external samples",
+      "file": "inbox_zero.wav"
+    },
+    {
+      "id": "bootloop.starter.window_manager",
+      "slug": "window_manager",
+      "display_name": "Window Manager",
+      "bpm": 124,
+      "key_mode": "G Mixolydian",
+      "bars": 64,
+      "sample_rate": 48000,
+      "channels": 2,
+      "frame_count": 5945806,
+      "duration_seconds": 123.87095833333333,
+      "first_beat_frame": 0,
+      "first_beat_seconds": 0,
+      "sections": [
+        {
+          "name": "intro",
+          "start_bar": 0,
+          "bars": 8,
+          "start_frame": 0,
+          "end_frame": 743226
+        },
+        {
+          "name": "A",
+          "start_bar": 8,
+          "bars": 16,
+          "start_frame": 743226,
+          "end_frame": 2229677
+        },
+        {
+          "name": "break",
+          "start_bar": 24,
+          "bars": 8,
+          "start_frame": 2229677,
+          "end_frame": 2972903
+        },
+        {
+          "name": "build",
+          "start_bar": 32,
+          "bars": 8,
+          "start_frame": 2972903,
+          "end_frame": 3716129
+        },
+        {
+          "name": "B",
+          "start_bar": 40,
+          "bars": 16,
+          "start_frame": 3716129,
+          "end_frame": 5202581
+        },
+        {
+          "name": "outro",
+          "start_bar": 56,
+          "bars": 8,
+          "start_frame": 5202581,
+          "end_frame": 5945806
+        }
+      ],
+      "sha256": "f944a6db406bb4f8caaa2ce523c17e14ff40a18e09631e7d8ea4d68c4f199356",
+      "source_seed": 199839,
+      "provenance": "Original BOOTLOOP procedural composition; generate_v04_audio.py + arrangements.json; no external samples",
+      "file": "window_manager.wav"
+    },
+    {
+      "id": "bootloop.starter.boot_sequence",
+      "slug": "boot_sequence",
+      "display_name": "Boot Sequence",
+      "bpm": 130,
+      "key_mode": "D minor",
+      "bars": 64,
+      "sample_rate": 48000,
+      "channels": 2,
+      "frame_count": 5671385,
+      "duration_seconds": 118.15385416666666,
+      "first_beat_frame": 0,
+      "first_beat_seconds": 0,
+      "sections": [
+        {
+          "name": "intro",
+          "start_bar": 0,
+          "bars": 8,
+          "start_frame": 0,
+          "end_frame": 708923
+        },
+        {
+          "name": "A",
+          "start_bar": 8,
+          "bars": 16,
+          "start_frame": 708923,
+          "end_frame": 2126769
+        },
+        {
+          "name": "break",
+          "start_bar": 24,
+          "bars": 8,
+          "start_frame": 2126769,
+          "end_frame": 2835692
+        },
+        {
+          "name": "build",
+          "start_bar": 32,
+          "bars": 8,
+          "start_frame": 2835692,
+          "end_frame": 3544615
+        },
+        {
+          "name": "B",
+          "start_bar": 40,
+          "bars": 16,
+          "start_frame": 3544615,
+          "end_frame": 4962462
+        },
+        {
+          "name": "outro",
+          "start_bar": 56,
+          "bars": 8,
+          "start_frame": 4962462,
+          "end_frame": 5671385
+        }
+      ],
+      "sha256": "164cc3034630fc1d712d51958e5d6caa25562f0d726f5028ddc07aaed90189e1",
+      "source_seed": 199952,
+      "provenance": "Original BOOTLOOP procedural composition; generate_v04_audio.py + arrangements.json; no external samples",
+      "file": "boot_sequence.wav"
+    },
+    {
+      "id": "bootloop.starter.cache_miss",
+      "slug": "cache_miss",
+      "display_name": "Cache Miss",
+      "bpm": 136,
+      "key_mode": "F Dorian",
+      "bars": 64,
+      "sample_rate": 48000,
+      "channels": 2,
+      "frame_count": 5421176,
+      "duration_seconds": 112.94116666666666,
+      "first_beat_frame": 0,
+      "first_beat_seconds": 0,
+      "sections": [
+        {
+          "name": "intro",
+          "start_bar": 0,
+          "bars": 8,
+          "start_frame": 0,
+          "end_frame": 677647
+        },
+        {
+          "name": "A",
+          "start_bar": 8,
+          "bars": 16,
+          "start_frame": 677647,
+          "end_frame": 2032941
+        },
+        {
+          "name": "break",
+          "start_bar": 24,
+          "bars": 8,
+          "start_frame": 2032941,
+          "end_frame": 2710588
+        },
+        {
+          "name": "build",
+          "start_bar": 32,
+          "bars": 8,
+          "start_frame": 2710588,
+          "end_frame": 3388235
+        },
+        {
+          "name": "B",
+          "start_bar": 40,
+          "bars": 16,
+          "start_frame": 3388235,
+          "end_frame": 4743529
+        },
+        {
+          "name": "outro",
+          "start_bar": 56,
+          "bars": 8,
+          "start_frame": 4743529,
+          "end_frame": 5421176
+        }
+      ],
+      "sha256": "1e0ef6bfd3961ff71d78acffe4fa07609eeb5a3d90fbcdf04efa59e2ccc2d5b3",
+      "source_seed": 200065,
+      "provenance": "Original BOOTLOOP procedural composition; generate_v04_audio.py + arrangements.json; no external samples",
+      "file": "cache_miss.wav"
+    },
+    {
+      "id": "bootloop.starter.memory_leak",
+      "slug": "memory_leak",
+      "display_name": "Memory Leak",
+      "bpm": 142,
+      "key_mode": "B minor",
+      "bars": 64,
+      "sample_rate": 48000,
+      "channels": 2,
+      "frame_count": 5192113,
+      "duration_seconds": 108.16902083333333,
+      "first_beat_frame": 0,
+      "first_beat_seconds": 0,
+      "sections": [
+        {
+          "name": "intro",
+          "start_bar": 0,
+          "bars": 8,
+          "start_frame": 0,
+          "end_frame": 649014
+        },
+        {
+          "name": "A",
+          "start_bar": 8,
+          "bars": 16,
+          "start_frame": 649014,
+          "end_frame": 1947042
+        },
+        {
+          "name": "break",
+          "start_bar": 24,
+          "bars": 8,
+          "start_frame": 1947042,
+          "end_frame": 2596056
+        },
+        {
+          "name": "build",
+          "start_bar": 32,
+          "bars": 8,
+          "start_frame": 2596056,
+          "end_frame": 3245070
+        },
+        {
+          "name": "B",
+          "start_bar": 40,
+          "bars": 16,
+          "start_frame": 3245070,
+          "end_frame": 4543099
+        },
+        {
+          "name": "outro",
+          "start_bar": 56,
+          "bars": 8,
+          "start_frame": 4543099,
+          "end_frame": 5192113
+        }
+      ],
+      "sha256": "f39bb7f5210b648baf8233d0dc6da016bf9c4208e7ec08bb65789f76b36d0833",
+      "source_seed": 200178,
+      "provenance": "Original BOOTLOOP procedural composition; generate_v04_audio.py + arrangements.json; no external samples",
+      "file": "memory_leak.wav"
+    },
+    {
+      "id": "bootloop.starter.popup_storm",
+      "slug": "popup_storm",
+      "display_name": "Popup Storm",
+      "bpm": 148,
+      "key_mode": "A Phrygian",
+      "bars": 64,
+      "sample_rate": 48000,
+      "channels": 2,
+      "frame_count": 4981622,
+      "duration_seconds": 103.78379166666667,
+      "first_beat_frame": 0,
+      "first_beat_seconds": 0,
+      "sections": [
+        {
+          "name": "intro",
+          "start_bar": 0,
+          "bars": 8,
+          "start_frame": 0,
+          "end_frame": 622703
+        },
+        {
+          "name": "A",
+          "start_bar": 8,
+          "bars": 16,
+          "start_frame": 622703,
+          "end_frame": 1868108
+        },
+        {
+          "name": "break",
+          "start_bar": 24,
+          "bars": 8,
+          "start_frame": 1868108,
+          "end_frame": 2490811
+        },
+        {
+          "name": "build",
+          "start_bar": 32,
+          "bars": 8,
+          "start_frame": 2490811,
+          "end_frame": 3113514
+        },
+        {
+          "name": "B",
+          "start_bar": 40,
+          "bars": 16,
+          "start_frame": 3113514,
+          "end_frame": 4358919
+        },
+        {
+          "name": "outro",
+          "start_bar": 56,
+          "bars": 8,
+          "start_frame": 4358919,
+          "end_frame": 4981622
+        }
+      ],
+      "sha256": "de7180935a06043b882498bfe4b4f7894bc040888a4839f145abab8799e81394",
+      "source_seed": 200291,
+      "provenance": "Original BOOTLOOP procedural composition; generate_v04_audio.py + arrangements.json; no external samples",
+      "file": "popup_storm.wav"
+    },
+    {
+      "id": "bootloop.starter.stack_overflow",
+      "slug": "stack_overflow",
+      "display_name": "Stack Overflow",
+      "bpm": 156,
+      "key_mode": "C minor",
+      "bars": 64,
+      "sample_rate": 48000,
+      "channels": 2,
+      "frame_count": 4726154,
+      "duration_seconds": 98.46154166666666,
+      "first_beat_frame": 0,
+      "first_beat_seconds": 0,
+      "sections": [
+        {
+          "name": "intro",
+          "start_bar": 0,
+          "bars": 8,
+          "start_frame": 0,
+          "end_frame": 590769
+        },
+        {
+          "name": "A",
+          "start_bar": 8,
+          "bars": 16,
+          "start_frame": 590769,
+          "end_frame": 1772308
+        },
+        {
+          "name": "break",
+          "start_bar": 24,
+          "bars": 8,
+          "start_frame": 1772308,
+          "end_frame": 2363077
+        },
+        {
+          "name": "build",
+          "start_bar": 32,
+          "bars": 8,
+          "start_frame": 2363077,
+          "end_frame": 2953846
+        },
+        {
+          "name": "B",
+          "start_bar": 40,
+          "bars": 16,
+          "start_frame": 2953846,
+          "end_frame": 4135385
+        },
+        {
+          "name": "outro",
+          "start_bar": 56,
+          "bars": 8,
+          "start_frame": 4135385,
+          "end_frame": 4726154
+        }
+      ],
+      "sha256": "e6c0f02fa0439b224c3d24cb04c3f86afd090d90b51ab30e963995b45fb7438d",
+      "source_seed": 200404,
+      "provenance": "Original BOOTLOOP procedural composition; generate_v04_audio.py + arrangements.json; no external samples",
+      "file": "stack_overflow.wav"
+    },
+    {
+      "id": "bootloop.starter.kernel_panic",
+      "slug": "kernel_panic",
+      "display_name": "Kernel Panic",
+      "bpm": 168,
+      "key_mode": "E Dorian",
+      "bars": 64,
+      "sample_rate": 48000,
+      "channels": 2,
+      "frame_count": 4388571,
+      "duration_seconds": 91.4285625,
+      "first_beat_frame": 0,
+      "first_beat_seconds": 0,
+      "sections": [
+        {
+          "name": "intro",
+          "start_bar": 0,
+          "bars": 8,
+          "start_frame": 0,
+          "end_frame": 548571
+        },
+        {
+          "name": "A",
+          "start_bar": 8,
+          "bars": 16,
+          "start_frame": 548571,
+          "end_frame": 1645714
+        },
+        {
+          "name": "break",
+          "start_bar": 24,
+          "bars": 8,
+          "start_frame": 1645714,
+          "end_frame": 2194286
+        },
+        {
+          "name": "build",
+          "start_bar": 32,
+          "bars": 8,
+          "start_frame": 2194286,
+          "end_frame": 2742857
+        },
+        {
+          "name": "B",
+          "start_bar": 40,
+          "bars": 16,
+          "start_frame": 2742857,
+          "end_frame": 3840000
+        },
+        {
+          "name": "outro",
+          "start_bar": 56,
+          "bars": 8,
+          "start_frame": 3840000,
+          "end_frame": 4388571
+        }
+      ],
+      "sha256": "3e4121208e0a9b82f41213a4edae77411e5eefcf401a0639994277c1720c8728",
+      "source_seed": 200517,
+      "provenance": "Original BOOTLOOP procedural composition; generate_v04_audio.py + arrangements.json; no external samples",
+      "file": "kernel_panic.wav"
+    }
+  ]
+}
