@@ -7,7 +7,7 @@
 
 enum class EBootChunkFamily : uint8 { Recovery, GapTurn, Slide, Wall, Surf, Process };
 enum class EBootPlanFailure : uint8 { None, InvalidRequest, LiveBudget, NoLegalContinuation, ReplayMismatch };
-enum class EBootRecipeRole : uint8 { Floor, Wall, SlideCeiling, Decoration };
+enum class EBootRecipeRole : uint8 { Floor, Wall, SlideCeiling, Decoration, SurfRamp, Fatal };
 enum class EBootBaselineMove : uint8 { Run, Jump, Slide, WallRun, Surf };
 struct FBootBaselineMoveRecipe
 {
@@ -26,6 +26,7 @@ struct FBootRecipeBox
     FVector Center = FVector::ZeroVector;
     FVector HalfSize = FVector(1.);
     EBootRecipeRole Role = EBootRecipeRole::Floor;
+    FRotator Rotation = FRotator::ZeroRotator;
 };
 struct FBootRailRecipe
 {
@@ -66,6 +67,8 @@ struct FBootChunkDefinition
     uint32 RequiredAbilityMask = 0;
     bool bSafeContinuation = false;
     float DifficultyCost = 0.f;
+    // Authored gap interval stretched to the current jump/speed envelope.
+    double TechniqueGapStart = 0., TechniqueGapEnd = 0.;
     int32 CombinationCost = 0;
     int32 ProcessCost = 0;
     uint32 MusicalTags = 0;

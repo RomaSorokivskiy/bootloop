@@ -388,8 +388,8 @@ int32 UBootShellWidget::NativePaint(const FPaintArgs& Args, const FGeometry& G, 
         const FString Keys[]={KeyLabel(EBootInputAction::Forward)+TEXT(" / ")+KeyLabel(EBootInputAction::Back)+TEXT(" / ")+KeyLabel(EBootInputAction::Left)+TEXT(" / ")+KeyLabel(EBootInputAction::Right),
             KeyLabel(EBootInputAction::Jump),KeyLabel(EBootInputAction::Slide),KeyLabel(EBootInputAction::Snap),KeyLabel(EBootInputAction::AirRedirect),KeyLabel(EBootInputAction::BufferDash),
             KeyLabel(EBootInputAction::CardOne)+TEXT(" / ")+KeyLabel(EBootInputAction::CardTwo)+TEXT(" / ")+KeyLabel(EBootInputAction::CardThree),KeyLabel(EBootInputAction::Retry)+TEXT(" / ESC")};
-        const TCHAR* Lines[]={TEXT("Move / air strafe. Jump beside mint walls to wallrun."),TEXT("Jump / wallkick. Fresh landing input builds bhop."),
-            TEXT("Duck in air; slide on landing. Jump when clear."),TEXT("SNAP amber windows / intercept red POPUP."),TEXT("ALT-TAB redirects in air. Land to recharge."),
+        const TCHAR* Lines[]={TEXT("Move / air strafe. Mint walls: wallrun. Cyan ramps: A/D surf."),TEXT("Jump / wallkick. Fresh landing input builds bhop."),
+            TEXT("Hold to slide, then slow into crouch. Release to stand."),TEXT("SNAP amber windows / intercept red POPUP."),TEXT("ALT-TAB redirects in air. Land to recharge."),
             TEXT("BUFFER DASH in air, after choosing its upgrade card."),TEXT("Choose one upgrade while running. Music continues."),TEXT("Retry / pause. Remap controls on the INPUTS page.")};
         static_assert(UE_ARRAY_COUNT(Keys)==UE_ARRAY_COUNT(Lines));
         for(int32 I=0;I<UE_ARRAY_COUNT(Keys);++I)

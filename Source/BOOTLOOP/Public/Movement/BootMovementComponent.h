@@ -18,6 +18,8 @@ public:
     /** Caller has already validated ground/coyote and will queue its vertical launch. */
     void PrepareGroundJump();
     bool TryWallKick();
+    bool TryRampJump();
+    bool IsRampSurfing() const { return MovementMode==MOVE_Custom && CustomMovementMode==RampSurfMode; }
     void ResetParkour();
     void GrantOverclock();
     /** A single chain reserve: never accelerates the player or stacks with another window. */
@@ -92,6 +94,12 @@ private:
     float EffectiveTemporaryCap() const;
     void DecayDash(float DeltaTime);
     static constexpr uint8 WallRunMode = 1;
+    static constexpr uint8 RampSurfMode = 2;
+    bool FindSurfRamp(FHitResult& Hit) const;
+    bool TryStartRampSurf();
+    void PhysRampSurf(float DeltaTime,int32 Iterations);
+    FVector RampNormal=FVector::UpVector;
+    float RampBlockedUntil=-100.f;
     bool FindRunnableWall(FHitResult& OutHit) const;
     bool TryStartWallRun();
     void LeaveWallRun();

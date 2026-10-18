@@ -58,6 +58,31 @@ void AddVolumes(FBootCommittedChunk& C,const TArray<FBox>& Local,EBootVolumeKind
         C.WorldVolumes.Add(V);World.Add(Bounds(V));
     }
 }
+double RequiredGapWidth(const FBootTraversalEnvelope& E)
+{
+    const double AirSeconds=2.*E.JumpZCmps/(980.*E.GravityScale);
+    return AirSeconds*FMath::Min(E.AbsoluteCmps,E.TemporaryCmps+FBootTraversalPolicy::SurfMomentumCmps)+250.;
+}
+FBootChunkDefinition AdaptTechniqueGap(const FBootChunkDefinition& Source,const FBootTraversalEnvelope& E)
+{
+    FBootChunkDefinition D=Source;
+    if(D.TechniqueGapEnd<=D.TechniqueGapStart)return D;
+    const double Start=D.TechniqueGapStart,End=D.TechniqueGapEnd,Width=RequiredGapWidth(E),Delta=Width-(End-Start);
+    auto X=[&](double V){return V<=Start?V:V>=End?V+Delta:Start+(V-Start)*Width/(End-Start);};
+    auto Point=[&](FVector& P){P.X=X(P.X);};
+    auto Bounds=[&](TArray<FBox>& Boxes){for(auto& B:Boxes){B.Min.X=X(B.Min.X);B.Max.X=X(B.Max.X);}};
+    for(auto& B:D.Recipe.Boxes)
+    {
+        const double Min=X(B.Center.X-B.HalfSize.X),Max=X(B.Center.X+B.HalfSize.X);
+        B.Center.X=(Min+Max)*.5;B.HalfSize.X=(Max-Min)*.5;
+    }
+    for(auto& P:D.Recipe.Baseline)Point(P);
+    for(auto& P:D.Recipe.OptionalBranch)Point(P);
+    for(auto& Move:D.Recipe.BaselineMoves){Point(Move.Start);Point(Move.End);}
+    FVector Exit=D.Exit.GetLocation();Point(Exit);D.Exit.SetLocation(Exit);
+    Bounds(D.Occupied);Bounds(D.BodyClearance);D.TechniqueGapEnd=Start+Width;
+    return D;
+}
 bool Fits(const FBootChunkDefinition& D,const FBootTraversalEnvelope& E,const FBootRunModifiers& M)
 {
     FText Error;
@@ -65,6 +90,11 @@ bool Fits(const FBootChunkDefinition& D,const FBootTraversalEnvelope& E,const FB
     const float PotentialSpeed=FMath::Min(E.AbsoluteCmps,E.TemporaryCmps+FBootTraversalPolicy::SurfMomentumCmps);
     if(!FBootTraversalPolicy::Validate(E,Error)||E.RunCmps<D.MinSpeedCmps||PotentialSpeed>D.MaxSpeedCmps
         ||!FMath::IsFinite(M.WidthScale)||M.WidthScale<D.MinWidthScale||M.WidthScale>1.f) return false;
+    if(D.TechniqueGapEnd>D.TechniqueGapStart && D.Family==EBootChunkFamily::Wall)
+    {
+        const double AirSeconds=2.*E.JumpZCmps/(980.*E.GravityScale);
+        if(E.MomentumCmps*(E.WallRunSeconds*.7+AirSeconds*.9)<RequiredGapWidth(E)+100.)return false;
+    }
     // A narrowed elbow would move its exit floor away from the frozen connector.
     // Keep these authored connector geometries intact and choose a compatible next module.
     if(M.WidthScale<1.f && (FMath::Abs(D.Exit.GetLocation().Y)>.01 || !D.Exit.GetRotation().Equals(FQuat::Identity,.001)))return false;
@@ -241,9 +271,17 @@ FBootPlanResult FBootEndlessPlanner::PlanNext(const FBootPlanRequest& R)
         }
         if(!Fresh.IsEmpty())Choices=MoveTemp(Fresh);
     }
+    const FBootCommittedChunk* LastThreat=nullptr;
+    for(const auto& C:R.LiveDescriptors)if(!C.Recipe.Hazards.IsEmpty()&&(!LastThreat||C.InstanceId>LastThreat->InstanceId))LastThreat=&C;
+    if(!R.ReplayDecision.IsSet()&&LastThreat)
+    {
+        const double PriorSide=FMath::Sign(LastThreat->Recipe.Hazards[0].Sweep.GetCenter().Y);
+        if(Choices.ContainsByPredicate([&](const auto* D){return !D->Recipe.Hazards.IsEmpty()&&FMath::Sign(D->Recipe.Hazards[0].Sweep.GetCenter().Y)!=PriorSide;}))
+            Choices.RemoveAll([&](const auto* D){return !D->Recipe.Hazards.IsEmpty()&&FMath::Sign(D->Recipe.Hazards[0].Sweep.GetCenter().Y)==PriorSide;});
+    }
     auto Try=[&](const FBootChunkDefinition& D,bool bFallback)
     {
-        ++Result.AttemptCount;auto C=Commit(D,R);
+        ++Result.AttemptCount;auto C=Commit(AdaptTechniqueGap(D,R.CurrentEnvelope),R);
         if(HasUnrelatedOverlap(C,R.LiveDescriptors)||!ReservationClear(C,R.LiveDescriptors))return false;
         Result.bUsedFallback=bFallback;Result.ReservedContinuation=C.ReservedContinuation;Result.Committed=MoveTemp(C);return true;
     };

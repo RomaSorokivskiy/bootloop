@@ -34,6 +34,8 @@ public:
     virtual void Tick(float DeltaSeconds) override;
     virtual void SetupPlayerInputComponent(UInputComponent* PlayerInputComponent) override;
     virtual void OnMovementModeChanged(EMovementMode PrevMovementMode, uint8 PreviousCustomMode = 0) override;
+    virtual void NotifyHit(UPrimitiveComponent* MyComp,AActor* Other,UPrimitiveComponent* OtherComp,bool bSelfMoved,
+        FVector HitLocation,FVector HitNormal,FVector NormalImpulse,const FHitResult& Hit) override;
 
     UFUNCTION(BlueprintCallable, Category="BOOTLOOP") void RequestJump();
     UFUNCTION(BlueprintCallable, Category="BOOTLOOP") void StartSlide();
@@ -82,6 +84,7 @@ private:
     void WheelJump(const FInputActionValue& Value);
     void HandleFootContact(int32 Foot,FVector Position);
     void EndSlide();
+    void FinishSlideGlide();
     void BeginGroundSlide();
     void TryBufferedJump();
     void ReleaseMouse();
@@ -107,6 +110,7 @@ private:
     float JumpBufferedUntil = -100.f;
     bool bJumpConsumed = false;
     bool bSliding = false;
+    bool bSlideHeld = false;
     bool bAirSlideQueued = false;
     bool bDead = false;
     struct FPendingSurf

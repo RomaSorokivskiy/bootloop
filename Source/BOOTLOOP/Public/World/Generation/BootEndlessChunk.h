@@ -6,6 +6,7 @@
 #include "BootEndlessChunk.generated.h"
 class UInstancedStaticMeshComponent;
 class UPrimitiveComponent;
+class UTextRenderComponent;
 class ABootSurfWindow;
 class ABootScanProcess;
 class ABootPopupProcess;
@@ -43,6 +44,7 @@ private:
     bool bReady=false,bProcessesActive=true;
     TSet<int32> ArmedProcessIds;
     UPROPERTY() TArray<TObjectPtr<UInstancedStaticMeshComponent>> Solids;
+    UPROPERTY() TObjectPtr<UTextRenderComponent> RouteSign;
     UPROPERTY() TArray<TObjectPtr<ABootSurfWindow>> Windows;
     UPROPERTY() TArray<TObjectPtr<ABootScanProcess>> Scans;
     UPROPERTY() TArray<TObjectPtr<ABootPopupProcess>> Popups;

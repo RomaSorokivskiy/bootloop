@@ -23,6 +23,23 @@ void Floor(FBootChunkDefinition& D, double Start, double End, double Y = 0., dou
 {
     Box(D,FVector(Start,Y-HalfWidth,-80.),FVector(End,Y+HalfWidth,0.));
 }
+void TiltedBox(FBootChunkDefinition& D,FVector Center,FVector Half,FRotator Rotation,EBootRecipeRole Role)
+{
+    FBootRecipeBox B;B.Center=Center;B.HalfSize=Half;B.Rotation=Rotation;B.Role=Role;D.Recipe.Boxes.Add(B);
+    if(Role!=EBootRecipeRole::Decoration)D.Occupied.Add(FBox(-Half,Half).TransformBy(FTransform(Rotation,Center)));
+}
+void RampStrip(FBootChunkDefinition& D,FVector Start,FVector End,int32 Side,double HalfWidth=540.,double SeamOverlap=0.)
+{
+    const FVector Delta=End-Start;
+    const FRotator Tilt(0.,Delta.Rotation().Yaw,Side*55.);
+    const FVector LocalNormal=FRotator(0.,0.,Side*55.).RotateVector(FVector::UpVector);
+    const double Y=-FMath::Sign(LocalNormal.Y)*140.;
+    // The route centreline stays at deck elevation. Move the slab sideways
+    // within that plane instead of enlarging it into a tall corridor wall.
+    const double Z=-(LocalNormal.Y*Y+18.)/LocalNormal.Z;
+    const FVector Offset=FRotator(0.,Tilt.Yaw,0.).RotateVector(FVector(0.,Y,Z));
+    TiltedBox(D,(Start+End)*.5+Offset,FVector(Delta.Size()*.5+SeamOverlap,HalfWidth,18.),Tilt,EBootRecipeRole::SurfRamp);
+}
 void Rail(FBootChunkDefinition& D, double Y)
 {
     FBootRailRecipe R; R.Start = FVector(2500.,Y,0.); R.End = FVector(4000.,Y,0.);
@@ -266,6 +283,131 @@ TArray<FBootChunkDefinition> FBootChunkCatalog::Build()
         Box(D,FVector(5000.,-600.,-320.),FVector(6000.,600.,-240.));D.Recipe.Baseline.Add(D.Exit.GetLocation());
         D.BodyClearance.Add(FBox(FVector(5000.,-220.,-239.),FVector(6000.,220.,160.)));Result.Add(D);
     }
+    // Sweeping S-bends use real rotated floor tiles. Straight entry/exit aprons
+    // retain exact connector seams, while the route drifts into an open district.
+    for(const int32 Sign:{-1,1})for(const bool Wide:{false,true})
+    {
+        const FString Id=FString::Printf(TEXT("flow.curve.%s%s"),Sign>0?TEXT("left"):TEXT("right"),Wide?TEXT(".wide"):TEXT(""));
+        auto D=Base(*Id,EBootChunkFamily::GapTurn,8000.,1.f);D.MinWidthScale=1.f;
+        const double Offset=Sign*(Wide?2600.:1500.);
+        D.Exit=FTransform(FVector(8000.,Offset,0.));D.BodyClearance.Empty();
+        D.Recipe.Baseline={FVector::ZeroVector,FVector(700.,0.,0.)};Floor(D,0.,700.);
+        D.BodyClearance.Add(FBox(FVector(0,-220,1),FVector(700,220,400)));
+        FVector Previous(700,0,0);
+        for(int32 I=1;I<=10;++I)
+        {
+            const double T=I/10.;const FVector Next(700.+6600.*T,Offset*(.5-.5*FMath::Cos(PI*T)),0.);
+            const FVector Center=(Previous+Next)*.5;
+            const FRotator Rotation= (Next-Previous).Rotation();
+            TiltedBox(D,Center-FVector(0,0,40),FVector(FVector::Distance(Previous,Next)*.5+72.,650.,40.),Rotation,EBootRecipeRole::Floor);
+            D.BodyClearance.Add(FBox(FVector(-FVector::Distance(Previous,Next)*.5,-220,1),FVector(FVector::Distance(Previous,Next)*.5,220,400)).TransformBy(FTransform(Rotation,Center)));
+            D.Recipe.Baseline.Add(Next);Previous=Next;
+        }
+        Floor(D,7300.,8000.,Offset,650.);D.BodyClearance.Add(FBox(FVector(7300,Offset-220,1),FVector(8000,Offset+220,400)));
+        D.Recipe.Baseline.Add(D.Exit.GetLocation());Result.Add(D);
+    }
+    // Traversal lanes have no hidden floor under the gap. Their gap length is
+    // stretched by the planner beyond the current ordinary ballistic jump.
+    for(const int32 Sign:{-1,1})for(const bool Ramp:{false,true})
+    {
+        const FString Id=FString::Printf(TEXT("%s.required.%s"),Ramp?TEXT("ramp"):TEXT("wall"),Sign>0?TEXT("left"):TEXT("right"));
+        auto D=Base(*Id,Ramp?EBootChunkFamily::Surf:EBootChunkFamily::Wall,8000.,Ramp?2.f:1.8f);
+        D.MinWidthScale=1.f;D.TechniqueGapStart=2400.;D.TechniqueGapEnd=4600.;
+        Floor(D,0.,2400.);Floor(D,4600.,8000.);
+        if(Ramp)
+        {
+            D.Version=2;
+            // Keep a real air gap to both aprons: no buried end faces or
+            // overlapping platform/ramp collision. The planner scales this
+            // straight strip and both clearances with the technique gap.
+            RampStrip(D,FVector(2560.,0,0),FVector(4440.,0,0),Sign);
+            Move(D,EBootBaselineMove::Surf,FVector(2200,0,0),FVector(4800,0,0));
+        }
+        else
+        {
+            Box(D,FVector(2000.,Sign*440.-40.,-300.),FVector(5000.,Sign*440.+40.,650.),EBootRecipeRole::Wall);
+            Move(D,EBootBaselineMove::WallRun,FVector(2200.,Sign*350.,0.),FVector(4800.,Sign*350.,0.));
+        }
+        Result.Add(D);
+    }
+    // Compact, mirrored surf routes: a short straight, a lateral bend and an
+    // S-return. Curves have fixed authored geometry; do not pass yawed slabs
+    // through the X-only stretching used by the straight required technique gap.
+    for(const int32 Sign:{-1,1})for(int32 Shape=0;Shape<3;++Shape)
+    {
+        const TCHAR* ShapeName=Shape==0?TEXT("short"):Shape==1?TEXT("bend"):TEXT("s_curve");
+        const FString Id=FString::Printf(TEXT("ramp.%s.%s"),ShapeName,Sign>0?TEXT("left"):TEXT("right"));
+        const double StartX=2200.,RampLength=Shape==0?1400.:Shape==1?2400.:2800.;
+        const double EndX=StartX+RampLength,ExitY=Shape==1?Sign*800.:0.;
+        auto D=Base(*Id,EBootChunkFamily::Surf,EndX+2200.,Shape==0?1.5f:Shape==1?2.f:2.5f);
+        D.MinWidthScale=1.f;D.Exit=FTransform(FVector(EndX+2200.,ExitY,0.));
+        D.BodyClearance.Empty();D.Recipe.Baseline={FVector::ZeroVector};
+        const int32 Segments=Shape==0?1:24;
+        FVector Previous(StartX,0.,0.);D.Recipe.Baseline.Add(Previous);
+        for(int32 I=1;I<=Segments;++I)
+        {
+            const double T=double(I)/Segments;
+            const double Y=Shape==0?0.:Shape==1?ExitY*(.5-.5*FMath::Cos(PI*T))
+                :Sign*500.*(.5-.5*FMath::Cos(2.*PI*T));
+            const FVector Next(StartX+RampLength*T,Y,0.);
+            // Short overlapping facets close the wedge between neighbouring
+            // headings while staying below the 32-solid native chunk budget.
+            RampStrip(D,Previous,Next,Sign,Shape==0?500.:540.,Shape==0?0.:24.);
+            const FVector Center=(Previous+Next)*.5;const FRotator Heading=(Next-Previous).Rotation();
+            D.BodyClearance.Add(FBox(FVector(-FVector::Distance(Previous,Next)*.5,-220.,1.),
+                FVector(FVector::Distance(Previous,Next)*.5,220.,400.)).TransformBy(FTransform(Heading,Center)));
+            D.Recipe.Baseline.Add(Next);Previous=Next;
+        }
+        // Measure the rotated collision, not its nominal centreline endpoints.
+        // This retains at least 160cm of open air even on the curved variants.
+        FBox RampBounds(ForceInit);for(const auto& B:D.Occupied)RampBounds+=B;
+        const double TakeoffEnd=RampBounds.Min.X-160.,LandingStart=RampBounds.Max.X+160.;
+        Floor(D,0.,TakeoffEnd);Floor(D,LandingStart,D.Exit.GetLocation().X,ExitY);
+        D.BodyClearance.Add(FBox(FVector(0.,-220.,1.),FVector(TakeoffEnd,220.,400.)));
+        D.BodyClearance.Add(FBox(FVector(LandingStart,ExitY-220.,1.),FVector(D.Exit.GetLocation().X,ExitY+220.,400.)));
+        D.Recipe.Baseline.Add(D.Exit.GetLocation());
+        Move(D,EBootBaselineMove::Surf,FVector(TakeoffEnd-200.,0.,0.),FVector(LandingStart+200.,ExitY,0.));
+        Result.Add(D);
+    }
+    // Red stationary blockers complement the moving processes: alternating
+    // side gates, a low vault and a crouch gate with an ordinary clear bypass.
+    for(const int32 Sign:{-1,1})
+    {
+        auto D=Base(Sign>0?TEXT("obstacle.weave.left"):TEXT("obstacle.weave.right"),EBootChunkFamily::Process,9000.,1.5f);
+        Floor(D,0.,9000.);D.BodyClearance.Empty();D.Recipe.Baseline={FVector::ZeroVector};
+        for(int32 I=0;I<3;++I)
+        {
+            const double Side=Sign*(I%2==0?1.:-1.),X=2200.+I*2100.;
+            Box(D,FVector(X,Side>0?-80.:-600.,0.),FVector(X+120.,Side>0?600.:80.,430.),EBootRecipeRole::Fatal);
+            D.Recipe.Baseline.Add(FVector(X-450.,-Side*400.,0.));
+            D.Recipe.Baseline.Add(FVector(X+450.,-Side*400.,0.));
+        }
+        D.Recipe.Baseline.Add(D.Exit.GetLocation());
+        for(int32 I=1;I<D.Recipe.Baseline.Num();++I)
+        {const auto A=D.Recipe.Baseline[I-1],B=D.Recipe.Baseline[I];D.BodyClearance.Add(FBox(A.ComponentMin(B)+FVector(0,-100,1),A.ComponentMax(B)+FVector(0,100,300)));}
+        Result.Add(D);
+        auto Vault=Base(Sign>0?TEXT("obstacle.vault.left"):TEXT("obstacle.vault.right"),EBootChunkFamily::GapTurn,6000.,1.f);
+        Vault.MinWidthScale=1.f;
+        Floor(Vault,0.,6000.);Vault.BodyClearance.Empty();
+        Box(Vault,FVector(2600.,Sign>0?-600.:50.,0.),FVector(2800.,Sign>0?-50.:600.,65.),EBootRecipeRole::Fatal);
+        Box(Vault,FVector(3800.,Sign>0?50.:-600.,110.),FVector(4100.,Sign>0?600.:-50.,240.),EBootRecipeRole::SlideCeiling);
+        Vault.BodyClearance.Add(FBox(FVector(0,-40,1),FVector(6000,40,400)));Result.Add(Vault);
+    }
+    // The original process recipes all occupied the positive-Y lane. Mirror the
+    // complete solids, bypass, warning and operation sweep as one authored unit.
+    const int32 BeforeMirrors=Result.Num();
+    auto MirrorBounds=[](TArray<FBox>& Boxes){for(auto& B:Boxes){const double Min=B.Min.Y;B.Min.Y=-B.Max.Y;B.Max.Y=-Min;}};
+    for(int32 I=0;I<BeforeMirrors;++I)if(!Result[I].Recipe.Hazards.IsEmpty())
+    {
+        auto D=Result[I];D.Id=FName(*(D.Id.ToString()+TEXT(".mirror")));
+        for(auto& B:D.Recipe.Boxes){B.Center.Y=-B.Center.Y;B.Rotation.Yaw=-B.Rotation.Yaw;B.Rotation.Roll=-B.Rotation.Roll;}
+        for(auto& P:D.Recipe.Baseline)P.Y=-P.Y;
+        for(auto& P:D.Recipe.OptionalBranch)P.Y=-P.Y;
+        for(auto& M:D.Recipe.BaselineMoves){M.Start.Y=-M.Start.Y;M.End.Y=-M.End.Y;}
+        MirrorBounds(D.Occupied);MirrorBounds(D.BodyClearance);MirrorBounds(D.HazardSweeps);MirrorBounds(D.RailSweeps);
+        for(auto& H:D.Recipe.Hazards){const double Min=H.Sweep.Min.Y;H.Sweep.Min.Y=-H.Sweep.Max.Y;H.Sweep.Max.Y=-Min;}
+        Result.Add(D);
+    }
     for(auto& D:Result)D.ProcessCost=D.Recipe.Hazards.Num();
     Result.Sort([](const auto& A,const auto& B){return A.Id.ToString() < B.Id.ToString();});
     return Result;
@@ -276,6 +418,7 @@ bool FBootChunkCatalog::Validate(const FBootChunkDefinition& D,FString& Error)
     auto Fail=[&](const TCHAR* Message){Error=Message;return false;};
     if (D.Id.IsNone() || D.Version == 0 || D.Entry.ContainsNaN() || D.Exit.ContainsNaN()
         || !D.Entry.GetScale3D().Equals(FVector::OneVector) || !D.Exit.GetScale3D().Equals(FVector::OneVector)) return Fail(TEXT("Invalid connector identity/frame"));
+    if(!FMath::IsFinite(D.TechniqueGapStart)||!FMath::IsFinite(D.TechniqueGapEnd)||D.TechniqueGapStart<0.||D.TechniqueGapEnd<D.TechniqueGapStart)return Fail(TEXT("Invalid technique gap interval"));
     if (D.RequiredAbilityMask != 0 || !FMath::IsFinite(D.DifficultyCost) || D.DifficultyCost < 0.f
         || !FMath::IsFinite(D.MinSpeedCmps) || !FMath::IsFinite(D.MaxSpeedCmps)
         || D.MinSpeedCmps < 0.f || D.MaxSpeedCmps > 3600.f || D.MaxSpeedCmps < D.MinSpeedCmps) return Fail(TEXT("Invalid baseline speed/ability/difficulty"));
@@ -288,7 +431,7 @@ bool FBootChunkCatalog::Validate(const FBootChunkDefinition& D,FString& Error)
     for (const auto* Volumes : {&D.Occupied,&D.BodyClearance,&D.RailSweeps,&D.HazardSweeps})
         for (const auto& B : *Volumes) if (!FiniteBox(B)) return Fail(TEXT("Invalid swept volume"));
     for (const auto& B : D.Recipe.Boxes)
-        if (B.Center.ContainsNaN() || B.HalfSize.ContainsNaN() || B.HalfSize.GetMin() <= 0.) return Fail(TEXT("Invalid recipe box"));
+        if (B.Center.ContainsNaN() || B.HalfSize.ContainsNaN() || B.Rotation.ContainsNaN() || B.HalfSize.GetMin() <= 0.) return Fail(TEXT("Invalid recipe box"));
     auto Covered=[](const FBox& B,const TArray<FBox>& Volumes)
     {
         for(const auto& V:Volumes)if(V.Min.X<=B.Min.X+.01&&V.Min.Y<=B.Min.Y+.01&&V.Min.Z<=B.Min.Z+.01
@@ -296,7 +439,7 @@ bool FBootChunkCatalog::Validate(const FBootChunkDefinition& D,FString& Error)
         return false;
     };
     for(const auto& B:D.Recipe.Boxes)
-        if(B.Role!=EBootRecipeRole::Decoration&&!Covered(FBox(B.Center-B.HalfSize,B.Center+B.HalfSize),D.Occupied))return Fail(TEXT("Solid recipe escapes declared occupied volume"));
+        if(B.Role!=EBootRecipeRole::Decoration&&!Covered(FBox(-B.HalfSize,B.HalfSize).TransformBy(FTransform(B.Rotation,B.Center)),D.Occupied))return Fail(TEXT("Solid recipe escapes declared occupied volume"));
     for (const FVector& P : D.Recipe.Baseline) if (P.ContainsNaN()) return Fail(TEXT("Nonfinite path"));
     if (!D.Recipe.Baseline[0].Equals(D.Entry.GetLocation(),.1) || !D.Recipe.Baseline.Last().Equals(D.Exit.GetLocation(),.1)) return Fail(TEXT("Baseline connector mismatch"));
     if (!D.Recipe.OptionalBranch.IsEmpty())

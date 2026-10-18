@@ -102,6 +102,8 @@ void ABootRunner::SetupPlayerInputComponent(UInputComponent* PlayerInputComponen
     Input->BindAction(InputMapping->GetWheelAction(),ETriggerEvent::Triggered,this,&ABootRunner::WheelJump);
     Input->BindAction(InputMapping->GetAction(EBootInputAction::Jump),ETriggerEvent::Started,this,&ABootRunner::RequestJump);
     Input->BindAction(InputMapping->GetAction(EBootInputAction::Slide),ETriggerEvent::Started,this,&ABootRunner::StartSlide);
+    Input->BindAction(InputMapping->GetAction(EBootInputAction::Slide),ETriggerEvent::Completed,this,&ABootRunner::EndSlide);
+    Input->BindAction(InputMapping->GetAction(EBootInputAction::Slide),ETriggerEvent::Canceled,this,&ABootRunner::EndSlide);
     Input->BindAction(InputMapping->GetAction(EBootInputAction::Snap),ETriggerEvent::Started,this,&ABootRunner::RequestSnap);
     Input->BindAction(InputMapping->GetAction(EBootInputAction::AirRedirect),ETriggerEvent::Started,this,&ABootRunner::RequestAirRedirect);
     Input->BindAction(InputMapping->GetAction(EBootInputAction::Retry),ETriggerEvent::Started,this,&ABootRunner::RetryInput);
@@ -217,6 +219,12 @@ void ABootRunner::LookY(const FInputActionValue& Value)
 void ABootRunner::RequestJump()
 {
     if (!CanUseMovementInput()) return;
+    if(GetParkour()->TryRampJump())
+    {
+        bJumpConsumed=true;JumpBufferedUntil=-100.f;
+        if(auto* GI=GetGameInstance<UBootGameInstance>())GI->Sound(EBootSound::Jump);
+        return;
+    }
     CaptureFirstRunObjective(EBootFirstRunEvent::WallKick);
     CaptureLessonObjective(EBootTutorialEvent::WallKickLanded);
     if (GetParkour()->TryWallKick())
@@ -230,9 +238,11 @@ void ABootRunner::RequestJump()
     PendingLessonObjectives.Remove(EBootTutorialEvent::WallKickLanded);
     if (bSliding || bIsCrouched)
     {
+        const bool Held=bSlideHeld;
         EndSlide();
+        bSlideHeld=Held;
         GetCharacterMovement()->UnCrouch(false);
-        if (bIsCrouched) return;
+        if (bIsCrouched) {if(Held)Crouch();return;}
     }
     bBufferedWheelJump=bFreshWheelJump;
     JumpBufferedUntil = GetWorld()->GetTimeSeconds() + (GetParkour()->GetTraversalEnvelope().bValid?GetParkour()->GetManualHopGrace():.10f);
@@ -258,6 +268,7 @@ void ABootRunner::TryBufferedJump()
         if(!bBufferedWheelJump || Movement->Velocity.Size2D()<=Before+50.f) PendingFirstRunObjectives.Remove(EBootFirstRunEvent::ManualHop);
         bBufferedWheelJump=false;
         bJumpConsumed = true;
+        if(bSlideHeld)bAirSlideQueued=true;
         JumpBufferedUntil = -100.f;
         LastGroundedTime = -100.f;
         if (auto* GI = GetGameInstance<UBootGameInstance>()) GI->Sound(EBootSound::Jump);
@@ -299,7 +310,9 @@ void ABootRunner::StartSlide()
 {
     UCharacterMovementComponent* Movement = GetCharacterMovement();
     if (!CanUseMovementInput() || bSliding) return;
+    bSlideHeld=true;
     JumpBufferedUntil = -100.f;
+    if(GetParkour()->IsWallRunning())Movement->SetMovementMode(MOVE_Falling);
     if (Movement->IsFalling())
     {
         CaptureLessonObjective(EBootTutorialEvent::SlideCompleted);
@@ -330,11 +343,21 @@ void ABootRunner::BeginGroundSlide()
     Movement->BrakingDecelerationWalking = bSliding ? 0.f : 2200.f;
     Movement->MaxWalkSpeedCrouched = bSliding ? FMath::Max(RunSpeed, Movement->Velocity.Size2D()) : 350.f;
     SlideStartedAt=GetWorld()->GetTimeSeconds();
-    GetWorldTimerManager().SetTimer(SlideTimer, this, &ABootRunner::EndSlide, SlideSeconds, false);
+    GetWorldTimerManager().SetTimer(SlideTimer, this, &ABootRunner::FinishSlideGlide, SlideSeconds, false);
+}
+
+void ABootRunner::FinishSlideGlide()
+{
+    if(bDead)return;
+    if(bSliding)CompleteLessonObjective(EBootTutorialEvent::SlideCompleted);
+    if(bSliding && GetCharacterMovement()->IsMovingOnGround())CompleteFirstRunObjective(EBootFirstRunEvent::GroundSlide);
+    if(!bSlideHeld)EndSlide();
 }
 
 void ABootRunner::EndSlide()
 {
+    GetWorldTimerManager().ClearTimer(SlideTimer);
+    bSlideHeld=false;
     if(bSliding && !bDead) CompleteLessonObjective(EBootTutorialEvent::SlideCompleted);
     if(bSliding && !bDead && GetCharacterMovement()->IsMovingOnGround() && GetWorld()->GetTimeSeconds()-SlideStartedAt>=SlideSeconds-.01f) CompleteFirstRunObjective(EBootFirstRunEvent::GroundSlide);
     else PendingFirstRunObjectives.Remove(EBootFirstRunEvent::GroundSlide);
@@ -351,6 +374,20 @@ void ABootRunner::EndSlide()
 void ABootRunner::Tick(float DeltaSeconds)
 {
     Super::Tick(DeltaSeconds);
+    if(bSlideHeld && !CanUseMovementInput())EndSlide();
+    if(bSlideHeld && !bDead && GetCharacterMovement()->IsMovingOnGround())
+    {
+        auto* Movement=GetCharacterMovement();
+        if(bSliding && GetWorld()->GetTimeSeconds()-SlideStartedAt>SlideSeconds)
+        {
+            const float Speed=Movement->Velocity.Size2D();
+            const float Braking=1000.f*(GetParkour()->GetTraversalEnvelope().bValid?GetParkour()->GetTraversalEnvelope().SlideBrakingScale:1.f);
+            const float Target=FMath::Max(350.f,Speed-Braking*DeltaSeconds);
+            if(Speed>350.f){Movement->Velocity.X*=Target/Speed;Movement->Velocity.Y*=Target/Speed;}
+            Movement->MaxWalkSpeedCrouched=Target;
+            if(Speed<=365.f){bSliding=false;Movement->GroundFriction=6.f;Movement->BrakingDecelerationWalking=2200.f;Movement->MaxWalkSpeedCrouched=350.f;}
+        }
+    }
     if (!bDead)
     {
         if (GetActorLocation().Z < DeathZ)
@@ -438,6 +475,13 @@ void ABootRunner::Tick(float DeltaSeconds)
                 PendingSurf.RemoveAt(I);
             }
         }
+}
+
+void ABootRunner::NotifyHit(UPrimitiveComponent* MyComp,AActor* Other,UPrimitiveComponent* OtherComp,bool bSelfMoved,
+    FVector HitLocation,FVector HitNormal,FVector NormalImpulse,const FHitResult& Hit)
+{
+    Super::NotifyHit(MyComp,Other,OtherComp,bSelfMoved,HitLocation,HitNormal,NormalImpulse,Hit);
+    if(!bDead && OtherComp && OtherComp->ComponentHasTag(TEXT("BootFatal")))Die();
 }
 
 void ABootRunner::Die()
@@ -613,6 +657,7 @@ void ABootRunner::RequestSnap()
 
 FString ABootRunner::GetSurfHint() const
 {
+    if(GetParkour()->IsRampSurfing())return TEXT("RAMP SURF / A-D TO STEER / JUMP TO EXIT");
     for(const auto& Ride:PendingSurf)
         if(const auto* Window=Ride.Window.Get())
             if(GetMovementBaseObject()==Window->GetRootComponent())

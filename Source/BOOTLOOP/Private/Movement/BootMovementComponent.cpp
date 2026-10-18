@@ -1,7 +1,9 @@
 #include "Movement/BootMovementComponent.h"
 
 #include "Components/CapsuleComponent.h"
+#include "Components/InstancedStaticMeshComponent.h"
 #include "Components/PrimitiveComponent.h"
+#include "Engine/ScopedMovementUpdate.h"
 #include "Engine/World.h"
 #include "GameFramework/Character.h"
 
@@ -17,6 +19,24 @@ namespace
     constexpr float AirRedirectMaximumDegrees = 60.f;
     constexpr float DashImpulseCmps = 600.f;
     constexpr float DashDecaySeconds = .60f;
+    constexpr float RampJumpGraceSeconds = .45f;
+    constexpr float RampAttachDistanceCm = 14.f;
+    constexpr float RampSeamNormalDot = .97f;
+    constexpr float RampSeamStepCm = 40.f;
+
+    FVector CarryRampVelocity(FVector Speed,FVector OldNormal,FVector NewNormal)
+    {
+        // Adjacent facets describe one banked curve. Rotate its tangent frame
+        // without losing energy to a fresh projection at every short facet.
+        if(FVector::DotProduct(OldNormal,NewNormal)<RampSeamNormalDot)
+            return FVector::VectorPlaneProject(Speed,NewNormal);
+        const double Yaw=FMath::Atan2(NewNormal.Y,NewNormal.X)-FMath::Atan2(OldNormal.Y,OldNormal.X);
+        const FQuat HeadingTurn(FVector::UpVector,Yaw);
+        // Constant-bank bends turn about world up, retaining horizontal speed
+        // as well as total speed. A bank change only rotates the remaining tilt.
+        const FQuat BankTurn=FQuat::FindBetweenNormals(HeadingTurn.RotateVector(OldNormal),NewNormal);
+        return BankTurn.RotateVector(HeadingTurn.RotateVector(Speed));
+    }
 
     void SetHorizontalSpeed(FVector& Velocity, float Speed)
     {
@@ -260,7 +280,7 @@ bool UBootMovementComponent::TryAirRedirect(FVector DesiredWorldDirection)
 float UBootMovementComponent::GetMaxSpeed() const
 {
     const float Cap = EffectiveHorizontalCap();
-    if (IsWallRunning()) return Cap;
+    if (IsWallRunning() || IsRampSurfing()) return Cap;
     const float ConfiguredSpeed = Super::GetMaxSpeed();
     // Preserve a freshly landed hop and airborne steering. Holding ordinary run
     // on the floor for longer than the landing window returns to base run speed.
@@ -403,6 +423,155 @@ void UBootMovementComponent::OnMovementModeChanged(EMovementMode PreviousMovemen
     Super::OnMovementModeChanged(PreviousMovementMode, PreviousCustomMode);
 }
 
+bool UBootMovementComponent::FindSurfRamp(FHitResult& OutHit) const
+{
+    if(!HasValidData() || !CharacterOwner || !GetWorld())return false;
+    const auto* Capsule=CharacterOwner->GetCapsuleComponent();
+    const FVector Location=UpdatedComponent->GetComponentLocation();
+    const FVector Right=FVector::CrossProduct(FVector::UpVector,Velocity.GetSafeNormal2D());
+    const FVector Down(0,0,-Capsule->GetScaledCapsuleHalfHeight()-75.);
+    FCollisionQueryParams Query(SCENE_QUERY_STAT(BootRampSurf),false,CharacterOwner);
+    float BestDistance=TNumericLimits<float>::Max();bool Found=false;
+    // A normal-directed probe keeps the contact through a turning seam even
+    // when a vertical probe first sees the neighbouring slab's narrow end face.
+    for(const FVector Offset:{Down,Down*.65+Right*110.,Down*.65-Right*110.,
+        -RampNormal*(Capsule->GetScaledCapsuleHalfHeight()+75.)})
+    {
+        FHitResult Hit;
+        if(GetWorld()->LineTraceSingleByChannel(Hit,Location,Location+Offset,Capsule->GetCollisionObjectType(),Query)
+            && Hit.IsValidBlockingHit() && Hit.GetComponent()
+            && Hit.GetComponent()->ComponentHasTag(TEXT("BootSurfRamp"))
+            && Hit.ImpactNormal.Z>.25 && Hit.ImpactNormal.Z<.8)
+        {
+            const FVector Normal=Hit.ImpactNormal.GetSafeNormal();
+            const float Support=Capsule->GetScaledCapsuleRadius()
+                +(Capsule->GetScaledCapsuleHalfHeight()-Capsule->GetScaledCapsuleRadius())*Normal.Z+2.f;
+            const float Distance=FMath::Abs(float(FVector::DotProduct(Location-Hit.ImpactPoint,Normal))-Support);
+            if(Distance<BestDistance){BestDistance=Distance;OutHit=Hit;Found=true;}
+        }
+    }
+    return Found;
+}
+
+bool UBootMovementComponent::TryStartRampSurf()
+{
+    if(!IsFalling() || Now()<RampBlockedUntil || Velocity.Size2D()<300.f)return false;
+    FHitResult Hit;if(!FindSurfRamp(Hit))return false;
+    const FVector Normal=Hit.ImpactNormal.GetSafeNormal();
+    // The long probes maintain contact while traversing a curve. Enter surf
+    // only at the actual capsule surface, never by pulling an airborne jump
+    // back from the probe's full reach, or while travelling away from the plane.
+    const auto* Capsule=CharacterOwner->GetCapsuleComponent();
+    const float Support=Capsule->GetScaledCapsuleRadius()
+        +(Capsule->GetScaledCapsuleHalfHeight()-Capsule->GetScaledCapsuleRadius())*Normal.Z+2.f;
+    const float Distance=FVector::DotProduct(UpdatedComponent->GetComponentLocation()-Hit.ImpactPoint,Normal);
+    if(Distance>Support+RampAttachDistanceCm || FVector::DotProduct(Velocity,Normal)>10.f)return false;
+    RampNormal=Normal;
+    Velocity=FVector::VectorPlaneProject(Velocity,RampNormal);
+    SetMovementMode(MOVE_Custom,RampSurfMode);
+    return true;
+}
+
+bool UBootMovementComponent::TryRampJump()
+{
+    if(!IsRampSurfing() || !HasValidData())return false;
+    const FVector Outward=RampNormal;
+    RampBlockedUntil=Now()+RampJumpGraceSeconds;
+    SetMovementMode(MOVE_Falling);
+    Velocity+=Outward*120.f;
+    Velocity.Z=FMath::Max(float(Velocity.Z),JumpZVelocity);
+    ClampHorizontalSpeed();return true;
+}
+
+void UBootMovementComponent::PhysRampSurf(float DeltaTime,int32 Iterations)
+{
+    if(DeltaTime<MIN_TICK_TIME || !HasValidData())return;
+    if(!CharacterOwner->Controller && !bRunPhysicsWithNoController)return;
+    float Remaining=DeltaTime;
+    while(Remaining>=MIN_TICK_TIME && Iterations<MaxSimulationIterations && IsRampSurfing())
+    {
+        ++Iterations;
+        const float Step=GetSimulationTimeStep(Remaining,Iterations);Remaining-=Step;
+        FHitResult Surface;
+        if(!FindSurfRamp(Surface))
+        {SetMovementMode(MOVE_Falling);StartNewPhysics(Remaining+Step,Iterations);return;}
+        const FVector SurfaceNormal=Surface.ImpactNormal.GetSafeNormal();
+        Velocity=CarryRampVelocity(Velocity,RampNormal,SurfaceNormal);
+        RampNormal=SurfaceNormal;
+        // Arcade Source-style surf: no floor friction, gravity projected onto
+        // the incline, and player strafe acceleration along its actual plane.
+        const FVector Force=FVector(0,0,GetGravityZ()*.45f)+Acceleration*.28f;
+        Velocity=FVector::VectorPlaneProject(Velocity+Force*Step,RampNormal);
+        Velocity.Z=FMath::Clamp(float(Velocity.Z),-700.f,500.f);
+        ClampHorizontalSpeed();
+        const auto* Capsule=CharacterOwner->GetCapsuleComponent();
+        const float Support=Capsule->GetScaledCapsuleRadius()
+            +(Capsule->GetScaledCapsuleHalfHeight()-Capsule->GetScaledCapsuleRadius())*RampNormal.Z+2.f;
+        const float Distance=FVector::DotProduct(UpdatedComponent->GetComponentLocation()-Surface.ImpactPoint,RampNormal);
+        const FVector Correction=RampNormal*FMath::Clamp(Support-Distance,-12.f,12.f);
+        FHitResult Hit;SafeMoveUpdatedComponent(Velocity*Step+Correction,UpdatedComponent->GetComponentQuat(),true,Hit);
+        if(!HasValidData() || !IsRampSurfing())return;
+        if(Hit.IsValidBlockingHit())
+        {
+            if(Velocity.Z<=0.f && IsValidLandingSpot(UpdatedComponent->GetComponentLocation(),Hit))
+            {SetMovementMode(MOVE_Falling);ProcessLanded(Hit,Remaining,Iterations);return;}
+            auto CrossInternalSeam=[&]()
+            {
+                // Only a neighbouring slab of the current surf component may
+                // use this bounded step. Floors, walls, hazards and separate
+                // ramps retain their ordinary blocking collision.
+                auto* Ramp=Cast<UInstancedStaticMeshComponent>(Hit.GetComponent());
+                if(!Ramp || Ramp!=Surface.GetComponent() || Hit.Item<0 || Surface.Item<0
+                    || FMath::Abs(Hit.Item-Surface.Item)>2 || Hit.bStartPenetrating)return false;
+                FTransform Facet;
+                if(!Ramp->GetInstanceTransform(Hit.Item,Facet,true))return false;
+                const FVector NextNormal=Facet.GetUnitAxis(EAxis::Z);
+                if(FVector::DotProduct(RampNormal,NextNormal)<RampSeamNormalDot)return false;
+                const FVector Travel=CarryRampVelocity(Velocity,RampNormal,NextNormal)*Step*(1.f-Hit.Time);
+                if(Travel.IsNearlyZero())return false;
+                FScopedMovementUpdate SeamMove(UpdatedComponent,EScopedUpdate::DeferredUpdates);
+                auto Fail=[&](){SeamMove.RevertMove();return false;};
+                const FVector Before=UpdatedComponent->GetComponentLocation();
+                const FQuat Rotation=UpdatedComponent->GetComponentQuat();
+                const float Lift=FMath::Min(MaxStepHeight,RampSeamStepCm);
+                if(Lift<=0.f)return Fail();
+                FHitResult LiftHit,ForwardHit,SettleHit;
+                SafeMoveUpdatedComponent(FVector(0,0,Lift),Rotation,true,LiftHit);
+                if(LiftHit.bBlockingHit)return Fail();
+                SafeMoveUpdatedComponent(Travel,Rotation,true,ForwardHit);
+                if(ForwardHit.bBlockingHit)return Fail();
+                const auto* Capsule=CharacterOwner->GetCapsuleComponent();
+                const float Support=Capsule->GetScaledCapsuleRadius()
+                    +(Capsule->GetScaledCapsuleHalfHeight()-Capsule->GetScaledCapsuleRadius())*NextNormal.Z+2.f;
+                const FVector PlanePoint=Facet.TransformPosition(FVector(0,0,50.));
+                const float Distance=FVector::DotProduct(UpdatedComponent->GetComponentLocation()-PlanePoint,NextNormal);
+                if(FMath::Abs(Support-Distance)>Lift+RampAttachDistanceCm)return Fail();
+                SafeMoveUpdatedComponent(NextNormal*(Support-Distance),Rotation,true,SettleHit);
+                if(SettleHit.bBlockingHit && (SettleHit.GetComponent()!=Ramp
+                    || FVector::DotProduct(SettleHit.ImpactNormal,NextNormal)<RampSeamNormalDot))return Fail();
+                FHitResult Contact;
+                if(!FindSurfRamp(Contact) || Contact.GetComponent()!=Ramp
+                    || FMath::Abs(Contact.Item-Hit.Item)>1
+                    || FVector::DotProduct(Contact.ImpactNormal,RampNormal)<RampSeamNormalDot
+                    || FVector::DotProduct(UpdatedComponent->GetComponentLocation()-Before,Travel)<=0.)return Fail();
+                const FVector ContactNormal=Contact.ImpactNormal.GetSafeNormal();
+                const float ContactSupport=Capsule->GetScaledCapsuleRadius()
+                    +(Capsule->GetScaledCapsuleHalfHeight()-Capsule->GetScaledCapsuleRadius())*ContactNormal.Z+2.f;
+                const float ContactDistance=FVector::DotProduct(UpdatedComponent->GetComponentLocation()-Contact.ImpactPoint,ContactNormal);
+                if(FMath::Abs(ContactDistance-ContactSupport)>RampAttachDistanceCm)return Fail();
+                Velocity=CarryRampVelocity(Velocity,RampNormal,ContactNormal);
+                RampNormal=ContactNormal;ClampHorizontalSpeed();return true;
+            };
+            if(CrossInternalSeam())continue;
+            HandleImpact(Hit,Step,Velocity*Step);
+            if(!IsRampSurfing())return;
+            SlideAlongSurface(Velocity*Step,1.f-Hit.Time,Hit.Normal,Hit,true);
+            if(FMath::Abs(FVector::DotProduct(Hit.Normal,RampNormal))<.7f)
+                Velocity=FVector::VectorPlaneProject(Velocity,Hit.Normal);
+        }
+    }
+}
+
 bool UBootMovementComponent::FindRunnableWall(FHitResult& OutHit) const
 {
     if (!HasValidData() || !CharacterOwner || !GetWorld()) return false;
@@ -461,6 +630,7 @@ bool UBootMovementComponent::TryStartWallRun()
 void UBootMovementComponent::PhysFalling(float DeltaTime, int32 Iterations)
 {
     if (DeltaTime < MIN_TICK_TIME || !HasValidData()) return;
+    if(TryStartRampSurf()){StartNewPhysics(DeltaTime,Iterations);return;}
     float Remaining = DeltaTime;
     while (Remaining >= MIN_TICK_TIME && Iterations < MaxSimulationIterations && HasValidData() && IsFalling())
     {
@@ -528,6 +698,7 @@ bool UBootMovementComponent::TryWallKick()
 
 void UBootMovementComponent::PhysCustom(float DeltaTime, int32 Iterations)
 {
+    if(IsRampSurfing()){PhysRampSurf(DeltaTime,Iterations);return;}
     if (!IsWallRunning())
     {
         Super::PhysCustom(DeltaTime, Iterations);
@@ -617,7 +788,8 @@ void UBootMovementComponent::ResetParkour()
     EnvelopeBlendSeconds = EnvelopeBlendElapsed = DashExtraSpeed = 0.f;
     MaximumAirRedirectCharges = AirRedirectCharges = 1;
     MaximumDashCharges = DashCharges = 0;
-    if (IsWallRunning()) SetMovementMode(MOVE_Falling);
+    if (IsWallRunning() || IsRampSurfing()) SetMovementMode(MOVE_Falling);
+    RampNormal=FVector::UpVector;RampBlockedUntil=-100.f;
     Wall.Reset();
     LastExitedWall.Reset();
     KickedWallUntilLanding.Reset();

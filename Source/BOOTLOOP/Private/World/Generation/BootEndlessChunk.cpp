@@ -4,6 +4,7 @@
 #include "Components/InstancedStaticMeshComponent.h"
 #include "Components/SceneComponent.h"
 #include "Components/CapsuleComponent.h"
+#include "Components/TextRenderComponent.h"
 #include "Engine/StaticMesh.h"
 #include "Engine/World.h"
 #include "GameFramework/Character.h"
@@ -25,14 +26,21 @@ ABootEndlessChunk::ABootEndlessChunk()
 {
     PrimaryActorTick.bCanEverTick=false;
     auto* Root=CreateDefaultSubobject<USceneComponent>(TEXT("ChunkRoot"));SetRootComponent(Root);
+    RouteSign=CreateDefaultSubobject<UTextRenderComponent>(TEXT("TraversalNotice"));RouteSign->SetupAttachment(Root);
+    RouteSign->SetRelativeLocation(FVector(1100.,0.,230.));RouteSign->SetRelativeRotation(FRotator(0,180,0));
+    RouteSign->SetWorldSize(36.f);RouteSign->SetHorizontalAlignment(EHTA_Center);RouteSign->SetTextRenderColor(FColor(245,205,96));
+    RouteSign->SetCollisionEnabled(ECollisionEnabled::NoCollision);RouteSign->SetCastShadow(false);
+    RouteSign->SetVisibility(false);RouteSign->SetHiddenInGame(true);RouteSign->SetText(FText::GetEmpty());
     static ConstructorHelpers::FObjectFinder<UStaticMesh> Cube(TEXT("/Engine/BasicShapes/Cube.Cube"));
     static ConstructorHelpers::FObjectFinderOptional<UMaterialInterface> Material(TEXT("/Game/Assets/V02/M_PixelSurface.M_PixelSurface"));
-    for(int32 I=0;I<4;++I)
+    for(int32 I=0;I<6;++I)
     {
         auto* Mesh=CreateDefaultSubobject<UInstancedStaticMeshComponent>(FName(*FString::Printf(TEXT("RecipeSolids%d"),I)));
         Mesh->SetupAttachment(Root);Mesh->SetMobility(EComponentMobility::Movable);Mesh->SetStaticMesh(Cube.Object);Mesh->SetMaterial(0,Material.Get());
         Mesh->SetCollisionProfileName(TEXT("BlockAll"));Mesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
         if(I==int32(EBootRecipeRole::Wall))Mesh->ComponentTags.AddUnique(TEXT("BootWallRun"));
+        if(I==int32(EBootRecipeRole::SurfRamp))Mesh->ComponentTags.AddUnique(TEXT("BootSurfRamp"));
+        if(I==int32(EBootRecipeRole::Fatal)){Mesh->ComponentTags.AddUnique(TEXT("BootFatal"));Mesh->SetNotifyRigidBodyCollision(true);}
         Mesh->CanCharacterStepUpOn=ECB_Yes;Mesh->SetGenerateOverlapEvents(false);Mesh->SetCanEverAffectNavigation(false);Mesh->SetCastShadow(false);Solids.Add(Mesh);
     }
 }
@@ -40,7 +48,10 @@ bool ABootEndlessChunk::Configure(const FBootCommittedChunk& In)
 {
     if(bReady||In.InstanceId<=0||!In.Run.RunId.IsValid()||In.WorldTransform.ContainsNaN()||In.Recipe.Boxes.Num()>32||In.Recipe.Rails.Num()+In.Recipe.Hazards.Num()>8)return false;
     Descriptor=In;SetActorTransform(In.WorldTransform);
-    const FLinearColor Palette[]={FLinearColor(.78f,.8f,.78f),FLinearColor(.02f,.04f,.38f),FLinearColor(1.f,.65f,.1f),FLinearColor(.25f,.8f,.6f)};
+    // Keep the named subobject for existing serialized actors, with no
+    // generated wall/surf instructions floating ahead of the route.
+    RouteSign->SetText(FText::GetEmpty());RouteSign->SetVisibility(false);RouteSign->SetHiddenInGame(true);
+    const FLinearColor Palette[]={FLinearColor(.78f,.8f,.78f),FLinearColor(.02f,.04f,.38f),FLinearColor(1.f,.65f,.1f),FLinearColor(.25f,.8f,.6f),FLinearColor(.1f,.65f,.8f),FLinearColor(.86f,.1f,.12f)};
     for(int32 I=0;I<Solids.Num();++I)
     {
         Solids[I]->ClearInstances();auto* Mat=UMaterialInstanceDynamic::Create(Solids[I]->GetMaterial(0),this);
@@ -48,14 +59,19 @@ bool ABootEndlessChunk::Configure(const FBootCommittedChunk& In)
     }
     for(const auto& B:In.Recipe.Boxes)
     {
-        if(B.Center.ContainsNaN()||B.HalfSize.ContainsNaN()||B.HalfSize.GetMin()<=0.)return false;
-        const int32 RecipeRole=FMath::Clamp(int32(B.Role),0,3);
-        Solids[RecipeRole]->AddInstance(FTransform(FQuat::Identity,B.Center,B.HalfSize*.02));
+        if(B.Center.ContainsNaN()||B.HalfSize.ContainsNaN()||B.Rotation.ContainsNaN()||B.HalfSize.GetMin()<=0.)return false;
+        const int32 RecipeRole=FMath::Clamp(int32(B.Role),0,5);
+        Solids[RecipeRole]->AddInstance(FTransform(B.Rotation,B.Center,B.HalfSize*.02));
         if(B.Role==EBootRecipeRole::Floor)
         {
             // Essential lane edges are visible geometry without extra collision or actors.
-            for(double Side:{-1.,1.})Solids[3]->AddInstance(FTransform(FQuat::Identity,
-                B.Center+FVector(0.,Side*(B.HalfSize.Y-10.),B.HalfSize.Z+1.),FVector(B.HalfSize.X*2.,12.,2.)/100.));
+            for(double Side:{-1.,1.})Solids[3]->AddInstance(FTransform(B.Rotation,
+                B.Center+B.Rotation.RotateVector(FVector(0.,Side*(B.HalfSize.Y-10.),B.HalfSize.Z+1.)),FVector(B.HalfSize.X*2.,12.,2.)/100.));
+        }
+        else if(B.Role==EBootRecipeRole::SurfRamp)
+        {
+            for(double Stripe:{-.6,0.,.6})Solids[3]->AddInstance(FTransform(B.Rotation,
+                B.Center+B.Rotation.RotateVector(FVector(0.,B.HalfSize.Y*Stripe,B.HalfSize.Z+2.)),FVector(2.*B.HalfSize.X,14.,3.)/100.));
         }
         else if(B.Role==EBootRecipeRole::Wall)
         {
@@ -120,9 +136,9 @@ bool ABootEndlessChunk::FinishPreparation()
     for(const auto& B:Descriptor.Recipe.Boxes)
     {
         if(B.Role==EBootRecipeRole::Decoration)continue;
-        if(GetWorld()->OverlapAnyTestByObjectType(Descriptor.WorldTransform.TransformPosition(B.Center),Descriptor.WorldTransform.GetRotation(),Objects,FCollisionShape::MakeBox(B.HalfSize),Params))return false;
+        if(GetWorld()->OverlapAnyTestByObjectType(Descriptor.WorldTransform.TransformPosition(B.Center),Descriptor.WorldTransform.GetRotation()*B.Rotation.Quaternion(),Objects,FCollisionShape::MakeBox(B.HalfSize),Params))return false;
     }
-    for(int32 I=0;I<3;++I)Solids[I]->SetCollisionEnabled(ECollisionEnabled::QueryAndPhysics);
+    for(int32 I=0;I<Solids.Num();++I)if(I!=int32(EBootRecipeRole::Decoration))Solids[I]->SetCollisionEnabled(ECollisionEnabled::QueryAndPhysics);
     for(ABootSurfWindow* Window:Windows){Window->SetActorEnableCollision(true);Window->SetReady(true);}
     bReady=true;SetProcessesActive(bProcessesActive);return true;
 }
