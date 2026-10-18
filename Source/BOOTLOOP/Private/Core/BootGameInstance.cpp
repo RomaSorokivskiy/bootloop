@@ -5,6 +5,8 @@
 #include "Engine/Engine.h"
 #include "GameFramework/GameUserSettings.h"
 #include "Kismet/GameplayStatics.h"
+#include "Kismet/KismetSystemLibrary.h"
+#include "UI/BootDisplaySettings.h"
 #include "Sound/SoundBase.h"
 #include "UObject/ConstructorHelpers.h"
 #include "Misc/CommandLine.h"
@@ -44,6 +46,8 @@ void UBootGameInstance::Init()
             if(const auto* Old=Cast<UBootProfile>(UGameplayStatics::LoadGameFromSlot(TEXT("BootloopProfile_v1"),0))) Profile->Options=Old->Options;
     }
     Profile->Options.Clamp();
+    RefreshDisplayModes();
+    NormalizeDisplayOptions(Profile->Options);
     Profile->Inputs.Sanitize();
     Profile->BestScore = FMath::Max(Profile->BestScore, 0);
     Profile->BestDistance = FMath::IsFinite(Profile->BestDistance) ? FMath::Max(0.f, Profile->BestDistance) : 0.f;
@@ -64,17 +68,39 @@ bool UBootGameInstance::SaveProfile()
     return !bSaveError;
 }
 
+void UBootGameInstance::RefreshDisplayModes()
+{
+    NativeResolution=FBootDisplaySettings::CurrentMonitorNative();
+    TArray<FIntPoint> Supported;
+    UKismetSystemLibrary::GetSupportedFullscreenResolutions(Supported);
+    DisplayModes=FBootDisplaySettings::BuildModes(NativeResolution,Supported);
+}
+
+void UBootGameInstance::NormalizeDisplayOptions(FBootOptions& Options) const
+{
+    if(DisplayModes.IsEmpty())return;
+    FIntPoint Preferred=Options.ResolutionSize;
+    if(Preferred.X<=0 || Preferred.Y<=0)
+    {
+        const FIntPoint Legacy[]={FIntPoint(1280,720),FIntPoint(1600,900),FIntPoint(1920,1080)};
+        Preferred=Legacy[FMath::Clamp(Options.Resolution,0,2)];
+    }
+    Options.Resolution=FBootDisplaySettings::ClosestMode(Preferred,DisplayModes);
+    Options.ResolutionSize=DisplayModes[Options.Resolution];
+}
+
 void UBootGameInstance::ApplyOptions(const FBootOptions& Options, bool bDisplay)
 {
     Profile->Options = Options;
     Profile->Options.Clamp();
+    if(bDisplay)RefreshDisplayModes();
+    NormalizeDisplayOptions(Profile->Options);
     const FBootOptions& O = Profile->Options;
     if (GEngine && bDisplay)
     {
         UGameUserSettings* User = GEngine->GetGameUserSettings();
-        const FIntPoint Sizes[] = {FIntPoint(1280,720), FIntPoint(1600,900), FIntPoint(1920,1080)};
         const float Limits[] = {60, 120, 144, 0};
-        User->SetScreenResolution(Sizes[O.Resolution]);
+        User->SetScreenResolution(O.ResolutionSize);
         User->SetFullscreenMode(O.WindowMode == 0 ? EWindowMode::Windowed : O.WindowMode == 1 ? EWindowMode::WindowedFullscreen : EWindowMode::Fullscreen);
         User->SetFrameRateLimit(Limits[O.FrameLimit]);
         User->ApplySettings(false);

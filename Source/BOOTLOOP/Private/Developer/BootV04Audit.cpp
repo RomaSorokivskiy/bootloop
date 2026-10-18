@@ -139,7 +139,7 @@ struct FAudit : TSharedFromThis<FAudit>
         for(auto& S:Shots) { auto J=S->AsObject();const bool Exists=IFileManager::Get().FileSize(*J->GetStringField(TEXT("file")))>0;J->SetBoolField(TEXT("exists"),Exists);Check(TEXT("capture_")+J->GetStringField(TEXT("label")),Exists); }
         auto J=MakeShared<FJsonObject>();J->SetStringField(TEXT("scenario"),Scenario);J->SetBoolField(TEXT("full_task15_acceptance"),false);J->SetBoolField(TEXT("passed"),Failure.IsEmpty());J->SetStringField(TEXT("failure"),Failure);J->SetArrayField(TEXT("checks"),Checks);J->SetArrayField(TEXT("captures"),Shots);
         J->SetNumberField(TEXT("wall_seconds"),RunAt>0.?FPlatformTime::Seconds()-RunAt:0.);J->SetNumberField(TEXT("active_seconds"),Limits.ActiveSeconds);J->SetNumberField(TEXT("physical_travel_cm"),Travel);J->SetNumberField(TEXT("transitions"),Transitions);J->SetNumberField(TEXT("distinct_tempos"),Tempos.Num());J->SetNumberField(TEXT("distinct_played_tracks"),PlayedHashes.Num());J->SetNumberField(TEXT("underflow_samples"),Underflows);J->SetNumberField(TEXT("frame_hitches_over_100ms"),FrameHitches);J->SetNumberField(TEXT("max_frame_seconds"),MaxFrame);J->SetNumberField(TEXT("peak_process_bytes"),double(PeakMemory));J->SetNumberField(TEXT("max_actors"),MaxActors);J->SetNumberField(TEXT("retired_chunks"),double(Retired));J->SetNumberField(TEXT("last_retired_id"),double(LastRetired));J->SetNumberField(TEXT("simulated_enhanced_input_card_choices"),CardChoices);J->SetNumberField(TEXT("foot_contacts"),FootContacts);J->SetNumberField(TEXT("max_audio_ring_bytes"),double(MaxAudioRingBytes));J->SetNumberField(TEXT("max_audio_lease_slots"),MaxLeaseSlots);J->SetNumberField(TEXT("audio_render_blocks"),double(AudioRenderBlocks));J->SetNumberField(TEXT("audio_output_frames"),double(AudioOutputFrames));J->SetNumberField(TEXT("audio_underflow_blocks"),double(AudioUnderflowBlocks));J->SetBoolField(TEXT("hardware_latency_measured"),false);TArray<TSharedPtr<FJsonValue>> MovementStates;for(const FString& State:CapturedMovementStates)MovementStates.Add(MakeShared<FJsonValueString>(State));J->SetArrayField(TEXT("captured_movement_states"),MovementStates);J->SetBoolField(TEXT("reverse_wall_driver"),bLeftWallAudit);
-        J->SetStringField(TEXT("evidence_scope"),TEXT("Native system-input route; AddMovementInput, RequestJump, StartSlide, RequestSnap. Cards use remapped PlayerController simulated InputKey press/release through EnhancedInput; not OS physical keyboard. No human playthrough/listening claim. No teleport substitutes for measured maneuvers; FirstRun has normal lesson checkpoint relocations."));
+        J->SetStringField(TEXT("evidence_scope"),Scenario==TEXT("Shell")?TEXT("Short RHI capture of HELP and Settings; monitor-mode ceiling observed. No gameplay, display-mode application or packaging exercised."):TEXT("Native system-input route; AddMovementInput, RequestJump, StartSlide, RequestSnap. Cards use remapped PlayerController simulated InputKey press/release through EnhancedInput; not OS physical keyboard. No human playthrough/listening claim. No teleport substitutes for measured maneuvers; FirstRun has normal lesson checkpoint relocations."));
         J->SetNumberField(TEXT("max_score_operation_history"),MaxScoreHistory);J->SetNumberField(TEXT("max_registered_process_history"),MaxProcessHistory);J->SetNumberField(TEXT("max_guard_contact_history"),MaxGuardHistory);J->SetNumberField(TEXT("max_surf_history_chunks"),MaxSurfChunks);J->SetNumberField(TEXT("max_surf_history_operations"),MaxSurfOperations);
         J->SetStringField(TEXT("unobserved"),TEXT("hardware audible sync; human music quality; OS physical card keys; all maximum builds; pinned mutation acceptance"));J->SetBoolField(TEXT("packaging_performed"),false);SaveJson(TEXT("checks.json"),J);
         FPlatformMisc::RequestExitWithStatus(false,Failure.IsEmpty()?0:1);
@@ -403,6 +403,27 @@ struct FAudit : TSharedFromThis<FAudit>
         auto G=Game.Get();if(!G)return false;
         auto PC=Cast<ABootPlayerController>(G->GetWorld()->GetFirstPlayerController());auto R=PC?Cast<ABootRunner>(PC->GetPawn()):nullptr;
         if(!R||!PC)return true;
+        if(Scenario==TEXT("Shell"))
+        {
+            const double Age=FPlatformTime::Seconds()-PhaseAt;
+            if(Stage==0&&Age>2.)
+            {
+                if(auto* GI=G->GetGameInstance<UBootGameInstance>())OriginalOptions=GI->GetOptions();
+                if(auto* Fps=IConsoleManager::Get().FindConsoleVariable(TEXT("t.MaxFPS")))OriginalMaxFps=Fps->GetFloat();
+                PC->ShowControls();Go(1);
+            }
+            else if(Stage==1&&Age>.5){Check(TEXT("help_open"),PC->GetPage()==EBootPage::Controls);Shot(PC,TEXT("help_fixed"));Go(2);}
+            else if(Stage==2&&Age>.35){PC->Back();PC->ShowSettings();Go(3);}
+            else if(Stage==3&&Age>.5)
+            {
+                auto* GI=G->GetGameInstance<UBootGameInstance>();
+                const auto& Modes=GI->GetResolutionOptions();
+                Check(TEXT("monitor_native_is_maximum"),!Modes.IsEmpty()&&Modes.Last()==GI->GetNativeResolution(),GI->GetNativeResolution().ToString());
+                Shot(PC,TEXT("settings_monitor_modes"));Go(4);
+            }
+            else if(Stage==4&&Age>.35){Finish();return false;}
+            return true;
+        }
         double Now=FPlatformTime::Seconds(),Age=Now-PhaseAt;ObserveCard(G,R,PC,Now);auto T=Cast<ABootEndlessTrack>(G->GetTrack());
         if(Now-Started>1500.){Check(TEXT("scenario_timeout"),false);Finish();return false;}
         if(Stage==0&&Age>2.){
@@ -497,7 +518,7 @@ void BootloopV04Audit::Start(ABootGameMode* Game)
     FFileHelper::SaveStringToFile(TEXT("wall_s,objective,section,x,y,z,vx,vy,vz,grounded,base_owner,popup_present,popup_x,popup_y,popup_z,available,moving,hostile,has_carried,ride_blocked,based_on_popup,last_snap_wall_s,snap_attempts,capsule_halfheight,capsule_radius,previous_target_x,previous_target_y,previous_target_z\n"),*(Active->Dir/TEXT("tutorial_trace.csv")));
     FFileHelper::SaveStringToFile(TEXT("wall_s,lesson,section,frame_dt,state,speed_cmps,run_envelope_cmps,vx,vy,vz,grounded,sliding,wallrunning,wall_side,base_owner,base_moving,has_carried,view_pitch\n"),*(Active->Dir/TEXT("movement_states.csv")));
     auto J=MakeShared<FJsonObject>();J->SetStringField(TEXT("scenario"),Active->Scenario);J->SetStringField(TEXT("map"),Game->GetWorld()->GetMapName());J->SetStringField(TEXT("capture_directory"),Active->Captures);J->SetNumberField(TEXT("seed"),Game->GetSeed());J->SetBoolField(TEXT("no_teleport_during_run"),Active->Scenario!=TEXT("FirstRun"));J->SetBoolField(TEXT("no_teleport_substitutes_for_measured_maneuvers"),true);J->SetBoolField(TEXT("human_playthrough"),false);J->SetStringField(TEXT("state"),TEXT("started; checks.json required for completion"));Active->SaveJson(TEXT("manifest.json"),J);
-    if(Active->Scenario!=TEXT("MusicRun")&&Active->Scenario!=TEXT("FirstRun")&&Active->Scenario!=TEXT("Avatar")&&Active->Scenario!=TEXT("Soak")){Active->Check(TEXT("known_scenario"),false);Active->Finish();return;}
+    if(Active->Scenario!=TEXT("MusicRun")&&Active->Scenario!=TEXT("FirstRun")&&Active->Scenario!=TEXT("Avatar")&&Active->Scenario!=TEXT("Soak")&&Active->Scenario!=TEXT("Shell")){Active->Check(TEXT("known_scenario"),false);Active->Finish();return;}
     Active->DriveHandle=FWorldDelegates::OnWorldPreActorTick.AddSP(Active.ToSharedRef(),&FAudit::Drive);
     TWeakPtr<FAudit> Weak=Active;Active->TickHandle=FTSTicker::GetCoreTicker().AddTicker(FTickerDelegate::CreateLambda([Weak](float){auto A=Weak.Pin();return A&&A->Tick();}),.025f);
     UE_LOG(LogTemp,Display,TEXT("V04 AUDIT output: %s"),*Active->Dir);

@@ -18,7 +18,8 @@ void FBootOptions::Clamp()
     InputOffsetMs = Safe(InputOffsetMs, 0.f, -250.f, 250.f);
     UiScale = Safe(UiScale, 1.f, 1.f, 1.25f);
     EffectsIntensity = Safe(EffectsIntensity,1.f,0.f,1.f);
-    Resolution = FMath::Clamp(Resolution, 0, 2);
+    Resolution = FMath::Max(Resolution, 0);
+    if(ResolutionSize.X<=0 || ResolutionSize.Y<=0)ResolutionSize=FIntPoint::ZeroValue;
     WindowMode = FMath::Clamp(WindowMode, 0, 2);
     FrameLimit = FMath::Clamp(FrameLimit, 0, 3);
     PixelQuality = FMath::Clamp(PixelQuality, 0, 2);

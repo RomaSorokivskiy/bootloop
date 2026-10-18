@@ -16,6 +16,10 @@ public:
     virtual void Init() override;
     UBootProfile* GetProfile() const { return Profile; }
     const FBootOptions& GetOptions() const { return Profile->Options; }
+    void RefreshDisplayModes();
+    void NormalizeDisplayOptions(FBootOptions& Options) const;
+    const TArray<FIntPoint>& GetResolutionOptions() const { return DisplayModes; }
+    FIntPoint GetNativeResolution() const { return NativeResolution; }
     void ApplyOptions(const FBootOptions& Options, bool bDisplay = true);
     bool SaveProfile();
     void Sound(EBootSound Id, float Pitch = 1.f);
@@ -26,4 +30,6 @@ private:
     UPROPERTY() TObjectPtr<UBootProfile> Profile;
     UPROPERTY() TArray<TObjectPtr<USoundBase>> Sounds;
     bool bSaveError = false;
+    TArray<FIntPoint> DisplayModes;
+    FIntPoint NativeResolution = FIntPoint(1280,720);
 };

@@ -10,11 +10,51 @@
 #include "GameFramework/PlayerInput.h"
 #include "Kismet/KismetSystemLibrary.h"
 #include "Kismet/GameplayStatics.h"
+#include "Engine/Engine.h"
+#include "Engine/GameViewportClient.h"
+#include "Engine/World.h"
+#include "Misc/Paths.h"
+#if PLATFORM_WINDOWS
+#include "GenericPlatform/GenericWindow.h"
+#include "Widgets/SWindow.h"
+#include "Windows/WindowsHWrapper.h"
+#endif
+
+namespace
+{
+void ApplyStandaloneWindowIcon(UWorld* World)
+{
+#if PLATFORM_WINDOWS
+    // PIE shares the Editor shell. Packaged games use the embedded ICO; the
+    // source file also brands standalone runs hosted by UnrealEditor.exe -game.
+    if(!World || World->WorldType==EWorldType::PIE || !GEngine || !GEngine->GameViewport)return;
+    const auto Window=GEngine->GameViewport->GetWindow();
+    if(!Window.IsValid() || !Window->GetNativeWindow().IsValid())return;
+    const FString Path=FPaths::ConvertRelativePathToFull(FPaths::ProjectDir()/TEXT("Build/Windows/Application.ico"));
+    if(!FPaths::FileExists(Path))return;
+    struct FIcons
+    {
+        HICON Large=nullptr, Small=nullptr;
+        explicit FIcons(const FString& File)
+        {
+            Large=static_cast<HICON>(::LoadImageW(nullptr,*File,IMAGE_ICON,32,32,LR_LOADFROMFILE));
+            Small=static_cast<HICON>(::LoadImageW(nullptr,*File,IMAGE_ICON,16,16,LR_LOADFROMFILE));
+        }
+        ~FIcons(){if(Large)::DestroyIcon(Large);if(Small)::DestroyIcon(Small);}
+    };
+    static FIcons Icons(Path);
+    const HWND Handle=static_cast<HWND>(Window->GetNativeWindow()->GetOSWindowHandle());
+    if(Icons.Large)::SendMessageW(Handle,WM_SETICON,ICON_BIG,reinterpret_cast<LPARAM>(Icons.Large));
+    if(Icons.Small)::SendMessageW(Handle,WM_SETICON,ICON_SMALL,reinterpret_cast<LPARAM>(Icons.Small));
+#endif
+}
+}
 
 void ABootPlayerController::BeginPlay()
 {
     Super::BeginPlay();
     if (!IsLocalController()) return;
+    ApplyStandaloneWindowIcon(GetWorld());
     Shell = CreateWidget<UBootShellWidget>(this, UBootShellWidget::StaticClass());
     Shell->AddToViewport(10);
     LibraryWidget=CreateWidget<UBootMusicLibraryWidget>(this,UBootMusicLibraryWidget::StaticClass());LibraryWidget->AddToViewport(20);

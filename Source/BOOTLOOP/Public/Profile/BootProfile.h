@@ -20,6 +20,8 @@ struct FBootOptions
     UPROPERTY() bool bMotion = true;
     UPROPERTY() int32 PixelQuality = 0;
     UPROPERTY() int32 Resolution = 0;
+    // Persist dimensions: display-mode indices can change between monitors.
+    UPROPERTY() FIntPoint ResolutionSize = FIntPoint::ZeroValue;
     UPROPERTY() int32 WindowMode = 0;
     UPROPERTY() int32 FrameLimit = 2;
     void Clamp();

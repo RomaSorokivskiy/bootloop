@@ -64,7 +64,8 @@ void UBootShellWidget::ChangePage(EBootPage NewPage)
     }
     OpenedAt = FPlatformTime::Seconds();
     if (Page == EBootPage::Settings)
-        if (const auto* GI = GetGameInstance<UBootGameInstance>()) Draft = GI->GetOptions();
+        if (auto* GI = GetGameInstance<UBootGameInstance>())
+        { GI->RefreshDisplayModes(); Draft=GI->GetOptions(); GI->NormalizeDisplayOptions(Draft); }
     InputDraft.CancelCapture(); InputMessage.Empty();
     if(Page==EBootPage::Inputs) if(const auto* GI=GetGameInstance<UBootGameInstance>()) InputDraft.Draft=GI->GetInputPreferences();
     SetVisibility(Page==EBootPage::Library?ESlateVisibility::Collapsed:Page == EBootPage::Hud || Page == EBootPage::Boot ? ESlateVisibility::HitTestInvisible : ESlateVisibility::Visible);
@@ -104,6 +105,18 @@ int32 UBootShellWidget::NativePaint(const FPaintArgs& Args, const FGeometry& G, 
     {
         FSlateDrawElement::MakeText(E, ++Layer, G.ToPaintGeometry(FVector2D(1200,120), FSlateLayoutTransform(DrawScale, DrawOrigin + FVector2D(X,Y)*DrawScale)),
             T, FSlateFontInfo(FPaths::ProjectContentDir()/TEXT("Slate/BootPixel.ttf"),FMath::Max(FontSize,11),EFontHinting::Monochrome), ESlateDrawEffect::None, C);
+    };
+    auto FitText = [&](FString Value,float X,float Y,int32 FontSize,float Width,FLinearColor C)
+    {
+        const auto Measure=FSlateApplication::Get().GetRenderer()->GetFontMeasureService();
+        FSlateFontInfo Font(FPaths::ProjectContentDir()/TEXT("Slate/BootPixel.ttf"),FontSize,EFontHinting::Monochrome);
+        while(Font.Size>11 && Measure->Measure(Value,Font).X>Width)--Font.Size;
+        if(Measure->Measure(Value,Font).X>Width)
+        {
+            while(Value.Len()>1 && Measure->Measure(Value+TEXT("..."),Font).X>Width)Value.LeftChopInline(1);
+            Value+=TEXT("...");
+        }
+        Text(Value,X,Y,Font.Size,C);
     };
     auto Frame = [&](float X, float Y, float W, float H, const FString& Title, FLinearColor TitleColor)
     {
@@ -350,10 +363,11 @@ int32 UBootShellWidget::NativePaint(const FPaintArgs& Args, const FGeometry& G, 
         Slider(103,TEXT("MOUSE SENSITIVITY"),FString::Printf(TEXT("%.2f"),Draft.Sensitivity),214,317);
         Slider(104,TEXT("FIELD OF VIEW"),FString::Printf(TEXT("%.0f"),Draft.Fov),214,385);
         Slider(105,TEXT("RHYTHM OFFSET"),FString::Printf(TEXT("%+.0f ms"),Draft.InputOffsetMs),214,453);
-        const TCHAR* Res[]={TEXT("1280 x 720"),TEXT("1600 x 900"),TEXT("1920 x 1080")};
         const TCHAR* Modes[]={TEXT("WINDOWED"),TEXT("BORDERLESS"),TEXT("FULLSCREEN")};
         const TCHAR* Caps[]={TEXT("60 FPS"),TEXT("120 FPS"),TEXT("144 FPS"),TEXT("UNLIMITED")};
-        Button(201,FString(TEXT("RESOLUTION   "))+Res[Draft.Resolution],660,151,404,34);
+        const FIntPoint Resolution=Draft.ResolutionSize.X>0?Draft.ResolutionSize:FIntPoint(1280,720);
+        Button(201,FString::Printf(TEXT("RESOLUTION  %d x %d%s"),Resolution.X,Resolution.Y,
+            GI && Resolution==GI->GetNativeResolution()?TEXT(" / NATIVE"):TEXT("")),660,151,404,34);
         Button(202,FString(TEXT("MODE   "))+Modes[Draft.WindowMode],660,195,404,34);
         Button(203,FString(TEXT("LIMIT   "))+Caps[Draft.FrameLimit],660,239,404,34);
         Button(204,FString::Printf(TEXT("HUD SCALE   %.0f %%"),Draft.UiScale*100),660,283,404,34);
@@ -370,18 +384,25 @@ int32 UBootShellWidget::NativePaint(const FPaintArgs& Args, const FGeometry& G, 
     }
     else if (Page==EBootPage::Controls)
     {
-        Frame(240,80,800,550,TEXT("HELP.EXE  /  KEEP THE PROCESS ALIVE"),Navy);
-        const FString Keys[]={KeyLabel(EBootInputAction::Forward)+TEXT(" / ")+KeyLabel(EBootInputAction::Left),KeyLabel(EBootInputAction::Jump),KeyLabel(EBootInputAction::Slide),KeyLabel(EBootInputAction::Snap),KeyLabel(EBootInputAction::AirRedirect),KeyLabel(EBootInputAction::Retry)+TEXT(" / ESC")};
-        const TCHAR* Lines[]={TEXT("Move and air strafe. Carry momentum."),TEXT("Jump / wallkick. Fresh landing input builds bhop."),TEXT("Duck in air, slide on landing. Jump when clear."),TEXT("SNAP amber windows / intercept red POPUP."),TEXT("ALT-TAB redirects in air. Land to recharge."),TEXT("Retry / pause. Inputs remap on their own page.")};
-        for(int32 I=0;I<6;++I)
+        Frame(100,58,1080,604,TEXT("HELP.EXE  /  KEEP THE PROCESS ALIVE"),Navy);
+        const FString Keys[]={KeyLabel(EBootInputAction::Forward)+TEXT(" / ")+KeyLabel(EBootInputAction::Back)+TEXT(" / ")+KeyLabel(EBootInputAction::Left)+TEXT(" / ")+KeyLabel(EBootInputAction::Right),
+            KeyLabel(EBootInputAction::Jump),KeyLabel(EBootInputAction::Slide),KeyLabel(EBootInputAction::Snap),KeyLabel(EBootInputAction::AirRedirect),KeyLabel(EBootInputAction::BufferDash),
+            KeyLabel(EBootInputAction::CardOne)+TEXT(" / ")+KeyLabel(EBootInputAction::CardTwo)+TEXT(" / ")+KeyLabel(EBootInputAction::CardThree),KeyLabel(EBootInputAction::Retry)+TEXT(" / ESC")};
+        const TCHAR* Lines[]={TEXT("Move / air strafe. Jump beside mint walls to wallrun."),TEXT("Jump / wallkick. Fresh landing input builds bhop."),
+            TEXT("Duck in air; slide on landing. Jump when clear."),TEXT("SNAP amber windows / intercept red POPUP."),TEXT("ALT-TAB redirects in air. Land to recharge."),
+            TEXT("BUFFER DASH in air, after choosing its upgrade card."),TEXT("Choose one upgrade while running. Music continues."),TEXT("Retry / pause. Remap controls on the INPUTS page.")};
+        static_assert(UE_ARRAY_COUNT(Keys)==UE_ARRAY_COUNT(Lines));
+        for(int32 I=0;I<UE_ARRAY_COUNT(Keys);++I)
         {
-            Rect(274,146+I*53,160,36,Paper); Text(Keys[I],285,155+I*53,12,Navy,true);
-            Text(Lines[I],456,155+I*53,12,Ink);
+            const float Y=124+I*48;
+            Rect(132,Y,300,40,Paper);
+            FitText(Keys[I],144,Y+12,12,276,Navy);
+            FitText(Lines[I],456,Y+12,12,688,Ink);
         }
-        Text(TEXT("PLAY YOUR WAY"),274,492,16,Navy,true);
-        Text(TEXT("SNAP on beat: one short overclock at departure. Off beat still works."),274,522,11,Ink);
-        Text(TEXT("Points for completed surfs. Jumps, bhop and slides give no points."),274,544,11,Ink);
-        Button(7,TEXT("GOT IT"),794,572,210,40,true);
+        Text(TEXT("PLAY YOUR WAY"),132,526,14,Navy,true);
+        FitText(TEXT("SURF EXIT: +3.5 M/S BHOP CAP. KEEP HOPPING TO RETAIN IT. DOES NOT STACK."),132,552,11,1008,Ink);
+        FitText(TEXT("COMPLETED SURFS SCORE. JUMPS / BHOP / SLIDES DO NOT. OFF BEAT STILL WORKS."),132,576,11,1008,Ink);
+        Button(7,TEXT("GOT IT"),930,608,214,38,true);
     }
     else if(Page==EBootPage::Pause)
     {
@@ -552,13 +573,19 @@ void UBootShellWidget::Activate(int32 Id)
     case 6: PC->Desktop(); break;
     case 7: PC->Back(); break;
     case 8: GI->ApplyOptions(Draft); PC->Back(); break;
-    case 10: Draft=FBootOptions{}; break;
+    case 10: Draft=FBootOptions{}; GI->NormalizeDisplayOptions(Draft); break;
     case 11: PC->ShowInputs(); break;
     case 12: PC->StartTutorial(); break;
     case 13: PC->StartPrimaryRun(); break;
     case 14: PC->SkipLesson(); break;
     case 15: PC->ShowMusicLibrary(); break;
-    case 201: Draft.Resolution=(Draft.Resolution+1)%3; break;
+    case 201:
+        if(!GI->GetResolutionOptions().IsEmpty())
+        {
+            Draft.Resolution=(Draft.Resolution+1)%GI->GetResolutionOptions().Num();
+            Draft.ResolutionSize=GI->GetResolutionOptions()[Draft.Resolution];
+        }
+        break;
     case 202: Draft.WindowMode=(Draft.WindowMode+1)%3; break;
     case 203: Draft.FrameLimit=(Draft.FrameLimit+1)%4; break;
     case 204: Draft.UiScale=Draft.UiScale<1.1f?1.25f:1.f; break;
